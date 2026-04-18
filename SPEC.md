@@ -78,7 +78,45 @@ score(A, B) = raw(A, B) / sqrt(raw(A,A) × raw(B,B))
 
 ## 8. API
 
-（未記載）
+### 8.1 クラス
+
+```ts
+class Analyzer {
+  constructor(repoPath: string, options?: AnalyzerOptions)
+  analyze(): Promise<void>
+  getFiles(): string[]
+  getRelated(file: string): RelatedFile[]
+}
+
+interface AnalyzerOptions {
+  ref?: string               // 解析対象 ref（デフォルト: 'HEAD'）
+  includeMergeCommits?: boolean  // マージコミットを含めるか（デフォルト: false）
+}
+
+interface RelatedFile {
+  file: string   // リポジトリルートからの相対パス
+  score: number  // 0〜1
+}
+```
+
+### 8.2 動作仕様
+
+- `analyze()`: git ログ取得 → 全ペアのスコアを計算して内部に保持。非同期。
+- `getFiles()`: スコアリングされた全ファイルパスを返す。同期。
+- `getRelated(file)`: 指定ファイルの関連ファイルをスコア降順で返す。同期。
+- `analyze()` 未呼び出しで `getFiles()` / `getRelated()` を呼ぶと例外。
+
+### 8.3 全ペア取得パターン
+
+`allPairs()` は提供しない。呼び出し側で `getFiles()` と `getRelated()` を組み合わせる:
+
+```ts
+const files = analyzer.getFiles()
+const allPairs = files.flatMap(f =>
+  analyzer.getRelated(f).map(r => ({ fileA: f, fileB: r.file, score: r.score }))
+)
+// score は対称なので重複あり。必要に応じて呼び出し側で除去する。
+```
 
 ## 9. 非機能要件
 
@@ -113,4 +151,6 @@ score(A, B) = raw(A, B) / sqrt(raw(A,A) × raw(B,B))
 | 2026-04-18 | スコアリングモデル | 時間減衰 (τ=8h固定, 打ち切り5τ=40h) + 同一author制約の余弦類似度。値域0〜1、対称。 |
 | 2026-04-18 | Author同一性 | git author email で判定。複数email使用はエッジケースとして無視。 |
 | 2026-04-18 | マージコミット | デフォルト除外。オプションで含めることも可。 |
+| 2026-04-18 | API設計 | クラス型。analyze()→getFiles()/getRelated()の順で使用。allPairs()は提供しない。 |
+| 2026-04-18 | ファイルパス形式 | リポジトリルートからの相対パス。 |
 | 2026-04-18 | 解析対象ブランチ | 指定 ref からたどれる全コミット。デフォルト HEAD。 |
