@@ -53,5 +53,8 @@ interface RelatedFile {
 
 ```bash
 npm run build      # TypeScript コンパイル（dist/ に出力）
+npm test           # テスト実行（node:test + tsx）
 npx tsc --noEmit   # 型チェックのみ
 ```
+
+CI は GitHub Actions で Node 18 / 20 / 22 に対してビルドとテストを実行する。
