@@ -1,5 +1,5 @@
 import { fetchCommits, getTrackedFiles } from './git'
-import { computeScores, normalizeScore, ScoreMap } from './scorer'
+import { computeScores, normalizeScore, type ScoreMap } from './scorer'
 
 export interface AnalyzerOptions {
   ref?: string
@@ -26,13 +26,16 @@ export class Analyzer {
 
   async analyze(): Promise<void> {
     const [commits, trackedFiles] = await Promise.all([
-      fetchCommits(this.repoPath, { ref: this.ref, includeMergeCommits: this.includeMergeCommits }),
+      fetchCommits(this.repoPath, {
+        ref: this.ref,
+        includeMergeCommits: this.includeMergeCommits,
+      }),
       getTrackedFiles(this.repoPath),
     ])
 
     const filteredCommits = commits
-      .map(c => ({ ...c, files: c.files.filter(f => trackedFiles.has(f)) }))
-      .filter(c => c.files.length > 0)
+      .map((c) => ({ ...c, files: c.files.filter((f) => trackedFiles.has(f)) }))
+      .filter((c) => c.files.length > 0)
 
     this.trackedFiles = trackedFiles
     this.scoreMap = computeScores(filteredCommits)
@@ -42,7 +45,7 @@ export class Analyzer {
     if (!this.scoreMap || !this.trackedFiles) {
       throw new Error('analyze() must be called before getFiles()')
     }
-    return Array.from(this.scoreMap.self.keys()).filter(f => this.trackedFiles!.has(f))
+    return Array.from(this.scoreMap.self.keys()).filter((f) => this.trackedFiles?.has(f) ?? false)
   }
 
   getRelated(file: string): RelatedFile[] {

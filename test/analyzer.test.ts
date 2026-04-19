@@ -1,9 +1,9 @@
-import { test, describe, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, writeFile, mkdir, unlink } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import simpleGit, { SimpleGit } from 'simple-git'
+import { after, before, describe, test } from 'node:test'
+import simpleGit, { type SimpleGit } from 'simple-git'
 import { Analyzer } from '../src/analyzer'
 
 async function makeRepo(): Promise<{ dir: string; git: SimpleGit }> {
@@ -20,7 +20,7 @@ async function commitFiles(
   git: SimpleGit,
   dir: string,
   files: Record<string, string>,
-  opts: { email?: string; name?: string; date?: string; message?: string } = {}
+  opts: { email?: string; name?: string; date?: string; message?: string } = {},
 ): Promise<void> {
   for (const [path, contents] of Object.entries(files)) {
     const full = join(dir, path)
@@ -70,17 +70,32 @@ describe('Analyzer', () => {
       dir = d
 
       // Commit 1: A, B together
-      await commitFiles(git, dir, { 'A.ts': '1', 'B.ts': '1' }, {
-        date: '2024-01-01T00:00:00Z',
-      })
+      await commitFiles(
+        git,
+        dir,
+        { 'A.ts': '1', 'B.ts': '1' },
+        {
+          date: '2024-01-01T00:00:00Z',
+        },
+      )
       // Commit 2: A only, 1 hour later
-      await commitFiles(git, dir, { 'A.ts': '2' }, {
-        date: '2024-01-01T01:00:00Z',
-      })
+      await commitFiles(
+        git,
+        dir,
+        { 'A.ts': '2' },
+        {
+          date: '2024-01-01T01:00:00Z',
+        },
+      )
       // Commit 3: C only, far in the future (>5τ = 40h)
-      await commitFiles(git, dir, { 'C.ts': '1' }, {
-        date: '2024-01-05T00:00:00Z',
-      })
+      await commitFiles(
+        git,
+        dir,
+        { 'C.ts': '1' },
+        {
+          date: '2024-01-05T00:00:00Z',
+        },
+      )
 
       analyzer = new Analyzer(dir)
       await analyzer.analyze()
@@ -104,14 +119,14 @@ describe('Analyzer', () => {
 
     test('A and B are related; C is isolated (beyond cutoff)', () => {
       const relA = analyzer.getRelated('A.ts')
-      const byFile = new Map(relA.map(r => [r.file, r.score]))
+      const byFile = new Map(relA.map((r) => [r.file, r.score]))
       assert.ok((byFile.get('B.ts') ?? 0) > 0, 'A should be related to B')
       assert.equal(byFile.get('C.ts') ?? 0, 0, 'A should not be related to C')
     })
 
     test('scores are symmetric between A and B', () => {
-      const ab = analyzer.getRelated('A.ts').find(r => r.file === 'B.ts')?.score ?? 0
-      const ba = analyzer.getRelated('B.ts').find(r => r.file === 'A.ts')?.score ?? 0
+      const ab = analyzer.getRelated('A.ts').find((r) => r.file === 'B.ts')?.score ?? 0
+      const ba = analyzer.getRelated('B.ts').find((r) => r.file === 'A.ts')?.score ?? 0
       assert.ok(Math.abs(ab - ba) < 1e-12)
     })
 
@@ -123,15 +138,25 @@ describe('Analyzer', () => {
   test('deleted files are excluded from getFiles()', async () => {
     const { dir, git } = await makeRepo()
     try {
-      await commitFiles(git, dir, { 'keep.ts': '1', 'gone.ts': '1' }, {
-        date: '2024-01-01T00:00:00Z',
-      })
+      await commitFiles(
+        git,
+        dir,
+        { 'keep.ts': '1', 'gone.ts': '1' },
+        {
+          date: '2024-01-01T00:00:00Z',
+        },
+      )
       await unlink(join(dir, 'gone.ts'))
       await git.rm('gone.ts')
-      await commitFiles(git, dir, { 'keep.ts': '2' }, {
-        date: '2024-01-01T01:00:00Z',
-        message: 'remove gone.ts',
-      })
+      await commitFiles(
+        git,
+        dir,
+        { 'keep.ts': '2' },
+        {
+          date: '2024-01-01T01:00:00Z',
+          message: 'remove gone.ts',
+        },
+      )
 
       const analyzer = new Analyzer(dir)
       await analyzer.analyze()
@@ -140,7 +165,7 @@ describe('Analyzer', () => {
       assert.ok(!files.includes('gone.ts'))
       // Related lookups should also not surface the deleted file.
       const related = analyzer.getRelated('keep.ts')
-      assert.ok(!related.some(r => r.file === 'gone.ts'))
+      assert.ok(!related.some((r) => r.file === 'gone.ts'))
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
@@ -149,21 +174,31 @@ describe('Analyzer', () => {
   test('different authors do not produce cross-commit relation', async () => {
     const { dir, git } = await makeRepo()
     try {
-      await commitFiles(git, dir, { 'A.ts': '1' }, {
-        email: 'alice@example.com',
-        name: 'Alice',
-        date: '2024-01-01T00:00:00Z',
-      })
-      await commitFiles(git, dir, { 'B.ts': '1' }, {
-        email: 'bob@example.com',
-        name: 'Bob',
-        date: '2024-01-01T00:30:00Z',
-      })
+      await commitFiles(
+        git,
+        dir,
+        { 'A.ts': '1' },
+        {
+          email: 'alice@example.com',
+          name: 'Alice',
+          date: '2024-01-01T00:00:00Z',
+        },
+      )
+      await commitFiles(
+        git,
+        dir,
+        { 'B.ts': '1' },
+        {
+          email: 'bob@example.com',
+          name: 'Bob',
+          date: '2024-01-01T00:30:00Z',
+        },
+      )
 
       const analyzer = new Analyzer(dir)
       await analyzer.analyze()
       const related = analyzer.getRelated('A.ts')
-      assert.equal(related.find(r => r.file === 'B.ts')?.score ?? 0, 0)
+      assert.equal(related.find((r) => r.file === 'B.ts')?.score ?? 0, 0)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
@@ -173,26 +208,41 @@ describe('Analyzer', () => {
     const { dir, git } = await makeRepo()
     try {
       // main branch: initial commit
-      await commitFiles(git, dir, { 'A.ts': '1' }, {
-        date: '2024-01-01T00:00:00Z',
-        message: 'init',
-      })
+      await commitFiles(
+        git,
+        dir,
+        { 'A.ts': '1' },
+        {
+          date: '2024-01-01T00:00:00Z',
+          message: 'init',
+        },
+      )
 
       const mainBranch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim()
 
       // feature branch touches B
       await git.checkoutLocalBranch('feature')
-      await commitFiles(git, dir, { 'B.ts': '1' }, {
-        date: '2024-01-01T00:30:00Z',
-        message: 'feat',
-      })
+      await commitFiles(
+        git,
+        dir,
+        { 'B.ts': '1' },
+        {
+          date: '2024-01-01T00:30:00Z',
+          message: 'feat',
+        },
+      )
 
       // back to main, touch C, then merge feature with --no-ff so a merge commit is created
       await git.checkout(mainBranch)
-      await commitFiles(git, dir, { 'C.ts': '1' }, {
-        date: '2024-01-01T01:00:00Z',
-        message: 'c',
-      })
+      await commitFiles(
+        git,
+        dir,
+        { 'C.ts': '1' },
+        {
+          date: '2024-01-01T01:00:00Z',
+          message: 'c',
+        },
+      )
       await git.merge(['--no-ff', '--no-edit', 'feature'])
 
       const withoutMerge = new Analyzer(dir)
@@ -208,11 +258,11 @@ describe('Analyzer', () => {
       // records both as changed relative to its first parent), so
       // includeMergeCommits should introduce a B–C relation that the default
       // analysis does not have.
-      const bcDefault = withoutMerge.getRelated('B.ts').find(r => r.file === 'C.ts')?.score ?? 0
-      const bcWithMerge = withMerge.getRelated('B.ts').find(r => r.file === 'C.ts')?.score ?? 0
+      const bcDefault = withoutMerge.getRelated('B.ts').find((r) => r.file === 'C.ts')?.score ?? 0
+      const bcWithMerge = withMerge.getRelated('B.ts').find((r) => r.file === 'C.ts')?.score ?? 0
       assert.ok(
         bcWithMerge >= bcDefault,
-        `includeMergeCommits should add >= relation: default=${bcDefault}, withMerge=${bcWithMerge}`
+        `includeMergeCommits should add >= relation: default=${bcDefault}, withMerge=${bcWithMerge}`,
       )
     } finally {
       await rm(dir, { recursive: true, force: true })
