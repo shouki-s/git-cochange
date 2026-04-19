@@ -30,7 +30,7 @@ export async function getTrackedFiles(repoPath: string): Promise<Set<string>> {
   return new Set(output.split('\n').filter(Boolean))
 }
 
-function parseLogOutput(output: string): CommitInfo[] {
+export function parseLogOutput(output: string): CommitInfo[] {
   const commits: CommitInfo[] = []
   const lines = output.split('\n')
   let i = 0
