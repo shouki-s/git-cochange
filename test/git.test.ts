@@ -1,17 +1,10 @@
-import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
+import { describe, test } from 'node:test'
 import { parseLogOutput } from '../src/git'
 
 describe('parseLogOutput', () => {
   test('parses a single commit with multiple files', () => {
-    const output = [
-      'COMMIT',
-      'alice@example.com',
-      '1700000000',
-      'src/a.ts',
-      'src/b.ts',
-      '',
-    ].join('\n')
+    const output = ['COMMIT', 'alice@example.com', '1700000000', 'src/a.ts', 'src/b.ts', ''].join('\n')
 
     const commits = parseLogOutput(output)
     assert.equal(commits.length, 1)
@@ -87,16 +80,7 @@ describe('parseLogOutput', () => {
   })
 
   test('ignores blank file lines', () => {
-    const output = [
-      'COMMIT',
-      'alice@example.com',
-      '1700000000',
-      'a.ts',
-      '',
-      '',
-      'b.ts',
-      '',
-    ].join('\n')
+    const output = ['COMMIT', 'alice@example.com', '1700000000', 'a.ts', '', '', 'b.ts', ''].join('\n')
 
     const commits = parseLogOutput(output)
     assert.equal(commits.length, 1)

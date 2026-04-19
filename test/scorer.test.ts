@@ -1,15 +1,13 @@
-import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { computeScores, normalizeScore } from '../src/scorer'
+import { describe, test } from 'node:test'
 import type { CommitInfo } from '../src/git'
+import { computeScores, normalizeScore } from '../src/scorer'
 
 const TAU = 8 * 3600
 
 describe('computeScores / normalizeScore', () => {
   test('same-commit pair has normalized score 1', () => {
-    const commits: CommitInfo[] = [
-      { timestamp: 0, authorEmail: 'a@x', files: ['A', 'B'] },
-    ]
+    const commits: CommitInfo[] = [{ timestamp: 0, authorEmail: 'a@x', files: ['A', 'B'] }]
     const m = computeScores(commits)
     assert.equal(normalizeScore(m, 'A', 'B'), 1)
     assert.equal(normalizeScore(m, 'B', 'A'), 1)
@@ -108,9 +106,7 @@ describe('computeScores / normalizeScore', () => {
   })
 
   test('missing file returns score 0 without throwing', () => {
-    const commits: CommitInfo[] = [
-      { timestamp: 0, authorEmail: 'a@x', files: ['A'] },
-    ]
+    const commits: CommitInfo[] = [{ timestamp: 0, authorEmail: 'a@x', files: ['A'] }]
     const m = computeScores(commits)
     assert.equal(normalizeScore(m, 'A', 'Z'), 0)
     assert.equal(normalizeScore(m, 'Z', 'Z'), 0)

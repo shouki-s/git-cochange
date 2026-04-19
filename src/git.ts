@@ -8,15 +8,11 @@ export interface CommitInfo {
 
 export async function fetchCommits(
   repoPath: string,
-  options: { ref: string; includeMergeCommits: boolean }
+  options: { ref: string; includeMergeCommits: boolean },
 ): Promise<CommitInfo[]> {
   const git = simpleGit(repoPath)
 
-  const args: string[] = [
-    'log',
-    '--format=COMMIT%n%ae%n%at',
-    '--name-only',
-  ]
+  const args: string[] = ['log', '--format=COMMIT%n%ae%n%at', '--name-only']
   if (!options.includeMergeCommits) args.push('--no-merges')
   args.push(options.ref)
 
@@ -41,7 +37,7 @@ export function parseLogOutput(output: string): CommitInfo[] {
       const timestamp = parseInt(lines[i + 2]?.trim() ?? '', 10)
       i += 3
 
-      if (!authorEmail || isNaN(timestamp)) continue
+      if (!authorEmail || Number.isNaN(timestamp)) continue
 
       const files: string[] = []
       while (i < lines.length && lines[i] !== 'COMMIT') {

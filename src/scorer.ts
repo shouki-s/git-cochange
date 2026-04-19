@@ -14,7 +14,10 @@ export function computeScores(commits: CommitInfo[]): ScoreMap {
 
   const addRaw = (a: string, b: string, w: number) => {
     let inner = raw.get(a)
-    if (!inner) { inner = new Map(); raw.set(a, inner) }
+    if (!inner) {
+      inner = new Map()
+      raw.set(a, inner)
+    }
     inner.set(b, (inner.get(b) ?? 0) + w)
   }
 
