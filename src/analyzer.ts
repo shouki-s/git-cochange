@@ -1,5 +1,5 @@
 import { fetchCommits, getTrackedFiles } from './git'
-import { computeScores, normalizeScore, type ScoreMap } from './scorer'
+import { computeScores, type ScoreMap } from './scorer'
 
 export interface AnalyzerOptions {
   ref?: string
@@ -41,18 +41,15 @@ export class Analyzer {
 
   getFiles(): string[] {
     const scoreMap = this.ensureAnalyzed()
-    return Array.from(scoreMap.self.keys())
+    return Array.from(scoreMap.files())
   }
 
   getRelated(file: string): RelatedFile[] {
     const scoreMap = this.ensureAnalyzed()
 
-    const inner = scoreMap.raw.get(file)
-    if (!inner) return []
-
     const results: RelatedFile[] = []
-    for (const otherFile of inner.keys()) {
-      const score = normalizeScore(scoreMap, file, otherFile)
+    for (const otherFile of scoreMap.related(file)) {
+      const score = scoreMap.normalize(file, otherFile)
       if (score > 0) results.push({ file: otherFile, score })
     }
 
