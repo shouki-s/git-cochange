@@ -21,6 +21,12 @@ import { Analyzer } from '../../src/index'
 
 const TEMPLATE_PATH = join(__dirname, 'template.html')
 
+// Cap related-files-per-file at the embedding stage so the JSON payload
+// stays roughly O(N) instead of O(N^2) on large repos. Must match the
+// HTML slider's top-K max (any value beyond this would be unrepresentable
+// anyway because the cap drops those pairs from the embedding).
+const TOP_K_CAP = 20
+
 interface Args {
   repo: string
   out: string
@@ -103,7 +109,7 @@ function buildPairs(analyzer: Analyzer): Pair[] {
   const seen = new Set<string>()
 
   for (const file of analyzer.getFiles()) {
-    for (const r of analyzer.getRelated(file)) {
+    for (const r of analyzer.getRelated(file).slice(0, TOP_K_CAP)) {
       const [a, b] = file < r.file ? [file, r.file] : [r.file, file]
       const key = `${a}\t${b}`
       if (seen.has(key)) continue
