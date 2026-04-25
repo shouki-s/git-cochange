@@ -1,16 +1,6 @@
 #!/usr/bin/env -S npx tsx
-//
-// git-cochange demo: clone a GitHub repository (or use a local one),
-// run the analyzer, and emit a self-contained HTML visualizing the
-// co-change graph as a D3 force-directed layout. Files with stronger
-// co-change relations are pulled closer together. The HTML has sliders
-// to filter by minimum score and per-file top-K.
-//
-// Usage:
-//   npx tsx examples/visualize <repo> [--out graph.html]
-//
-// <repo> accepts: owner/name, https://github.com/owner/name(.git),
-// or git@github.com:owner/name.git.
+// git-cochange demo: clone a GitHub repo, analyze it, and emit a
+// self-contained HTML force graph. Run with --help for usage.
 
 import { readFileSync } from 'node:fs'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
