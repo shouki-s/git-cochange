@@ -92,16 +92,25 @@ function normalizeRepoUrl(input: string): string {
   throw new Error(`Cannot interpret as a GitHub repo: ${input}`)
 }
 
-async function resolveRepoPath(repo: string): Promise<{ path: string; cleanup: () => Promise<void> }> {
+interface RepoHandle extends AsyncDisposable {
+  path: string
+}
+
+async function resolveRepoPath(repo: string): Promise<RepoHandle> {
   if (existsSync(repo)) {
-    return { path: resolve(repo), cleanup: async () => {} }
+    return { path: resolve(repo), [Symbol.asyncDispose]: async () => {} }
   }
 
   const url = normalizeRepoUrl(repo)
   const dir = await mkdtemp(join(tmpdir(), 'git-cochange-'))
-  console.log(`Cloning ${url} → ${dir}`)
-  await simpleGit().clone(url, dir)
-  return { path: dir, cleanup: () => rm(dir, { recursive: true, force: true }) }
+  try {
+    console.log(`Cloning ${url} → ${dir}`)
+    await simpleGit().clone(url, dir)
+  } catch (err) {
+    await rm(dir, { recursive: true, force: true })
+    throw err
+  }
+  return { path: dir, [Symbol.asyncDispose]: () => rm(dir, { recursive: true, force: true }) }
 }
 
 function buildPairs(analyzer: Analyzer): Pair[] {
@@ -138,23 +147,19 @@ function escapeHtml(s: string): string {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2))
-  const { path: repoPath, cleanup } = await resolveRepoPath(args.repo)
+  await using repo = await resolveRepoPath(args.repo)
 
-  try {
-    console.log(`Analyzing ${repoPath} ...`)
-    const analyzer = new Analyzer(repoPath)
-    await analyzer.analyze()
+  console.log(`Analyzing ${repo.path} ...`)
+  const analyzer = new Analyzer(repo.path)
+  await analyzer.analyze()
 
-    const pairs = buildPairs(analyzer)
-    console.log(`Embedded ${pairs.length} pairs (filtering happens in the browser)`)
+  const pairs = buildPairs(analyzer)
+  console.log(`Embedded ${pairs.length} pairs (filtering happens in the browser)`)
 
-    const html = renderHtml(pairs, args.repo)
-    const outPath = resolve(args.out)
-    await writeFile(outPath, html, 'utf-8')
-    console.log(`Wrote ${outPath}`)
-  } finally {
-    await cleanup()
-  }
+  const html = renderHtml(pairs, args.repo)
+  const outPath = resolve(args.out)
+  await writeFile(outPath, html, 'utf-8')
+  console.log(`Wrote ${outPath}`)
 }
 
 main()
