@@ -30,14 +30,14 @@
   <input id="search" type="text" placeholder="filter files…" />
   <span class="meta" id="counts"></span>
 </div>
-<svg id="graph"></svg>
+<svg id="graph" role="img" aria-label="git-cochange graph"></svg>
 <div id="tooltip"></div>
-<script id="graph-data" type="application/json">__GRAPH_DATA__</script>
+<script id="graph-data" type="application/json">"__GRAPH_DATA__"</script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script>
 const data = JSON.parse(document.getElementById('graph-data').textContent);
 document.getElementById('counts').textContent =
-  data.nodes.length + ' files · ' + data.links.length + ' edges';
+  `${data.nodes.length} files · ${data.links.length} edges`;
 
 const svg = d3.select('#graph');
 const tooltip = d3.select('#tooltip');
@@ -95,13 +95,13 @@ node.append('text')
   .attr('y', 3)
   .text(d => d.id.split('/').pop());
 
-node.on('mouseover', (event, d) => {
+node.on('mouseover', (_event, d) => {
     tooltip.style('opacity', 1).text(d.id);
     highlightNeighbors(d);
   })
   .on('mousemove', (event) => {
-    tooltip.style('left', (event.clientX + 10) + 'px')
-           .style('top', (event.clientY + 10) + 'px');
+    tooltip.style('left', `${event.clientX + 10}px`)
+           .style('top', `${event.clientY + 10}px`);
   })
   .on('mouseout', () => {
     tooltip.style('opacity', 0);
@@ -112,7 +112,7 @@ simulation.on('tick', () => {
   link
     .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
     .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
-  node.attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
+  node.attr('transform', d => `translate(${d.x},${d.y})`);
 });
 
 svg.call(d3.zoom().scaleExtent([0.1, 8]).on('zoom', (event) => {

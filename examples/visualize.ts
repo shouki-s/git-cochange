@@ -175,8 +175,10 @@ function renderHtml(graph: Graph, title: string): string {
   // Escape `<` so the JSON cannot prematurely close the embedding <script>.
   const dataJson = JSON.stringify(graph).replace(/</g, '\\u003c')
   const template = readFileSync(TEMPLATE_PATH, 'utf-8')
+  // The data placeholder is quoted in the template so it parses as a valid JSON
+  // string for biome; we replace including the quotes.
   // split/join avoids both ES2021 dependency and `$` substitution in replacement strings.
-  return template.split('__GRAPH_DATA__').join(dataJson).split('__TITLE__').join(escapeHtml(title))
+  return template.split('"__GRAPH_DATA__"').join(dataJson).split('__TITLE__').join(escapeHtml(title))
 }
 
 function escapeHtml(s: string): string {
