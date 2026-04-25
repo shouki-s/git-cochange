@@ -39,33 +39,16 @@ interface Pair {
 }
 
 function parseArgs(argv: string[]): Args {
-  const positional: string[] = []
-  const opts: Record<string, string> = {}
-
+  const args: Args = { repo: '', out: 'graph.html' }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
-    if (a === '-h' || a === '--help') {
-      printHelpAndExit(0)
-    } else if (a.startsWith('--')) {
-      const key = a.slice(2)
-      const value = argv[i + 1]
-      if (value === undefined || value.startsWith('--')) {
-        console.error(`Missing value for --${key}`)
-        printHelpAndExit(1)
-      }
-      opts[key] = value
-      i++
-    } else {
-      positional.push(a)
-    }
+    if (a === '-h' || a === '--help') printHelpAndExit(0)
+    else if (a === '--out') args.out = argv[++i] ?? printHelpAndExit(1)
+    else if (!a.startsWith('--') && !args.repo) args.repo = a
+    else printHelpAndExit(1)
   }
-
-  if (positional.length !== 1) {
-    console.error('Expected exactly one <repo> argument.')
-    printHelpAndExit(1)
-  }
-
-  return { repo: positional[0], out: opts.out ?? 'graph.html' }
+  if (!args.repo) printHelpAndExit(1)
+  return args
 }
 
 function printHelpAndExit(code: number): never {
