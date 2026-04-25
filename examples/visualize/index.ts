@@ -92,21 +92,9 @@ function normalizeRepoUrl(input: string): string {
   throw new Error(`Cannot interpret as a GitHub repo: ${input}`)
 }
 
-interface RepoHandle extends AsyncDisposable {
-  path: string
-}
-
-async function cloneToTemp(repo: string): Promise<RepoHandle> {
-  const url = normalizeRepoUrl(repo)
-  const dir = await mkdtemp(join(tmpdir(), 'git-cochange-'))
-  try {
-    console.log(`Cloning ${url} → ${dir}`)
-    await simpleGit().clone(url, dir)
-  } catch (err) {
-    await rm(dir, { recursive: true, force: true })
-    throw err
-  }
-  return { path: dir, [Symbol.asyncDispose]: () => rm(dir, { recursive: true, force: true }) }
+async function tempDir(prefix: string): Promise<{ path: string } & AsyncDisposable> {
+  const path = await mkdtemp(join(tmpdir(), prefix))
+  return { path, [Symbol.asyncDispose]: () => rm(path, { recursive: true, force: true }) }
 }
 
 function buildPairs(analyzer: Analyzer): Pair[] {
@@ -143,7 +131,11 @@ function escapeHtml(s: string): string {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2))
-  await using repo = await cloneToTemp(args.repo)
+  await using repo = await tempDir('git-cochange-')
+
+  const url = normalizeRepoUrl(args.repo)
+  console.log(`Cloning ${url} → ${repo.path}`)
+  await simpleGit().clone(url, repo.path)
 
   console.log(`Analyzing ${repo.path} ...`)
   const analyzer = new Analyzer(repo.path)
