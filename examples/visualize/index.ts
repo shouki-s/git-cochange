@@ -39,7 +39,7 @@ function parseArgs(argv: string[]): Args {
 }
 
 function printHelpAndExit(code: number): never {
-  const msg = `Usage: visualize.ts <repo> [options]
+  const msg = `Usage: examples/visualize <repo> [options]
 
 Arguments:
   <repo>                GitHub repo (owner/name or URL)
