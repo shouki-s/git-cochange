@@ -158,12 +158,11 @@ function update(minScore, topK) {
   simulation.alpha(0.6).restart();
 
   adjacency = new Map();
-  for (const l of links) {
-    if (!adjacency.has(l.source.id)) adjacency.set(l.source.id, new Set());
-    if (!adjacency.has(l.target.id)) adjacency.set(l.target.id, new Set());
-    adjacency.get(l.source.id).add(l.target.id);
-    adjacency.get(l.target.id).add(l.source.id);
-  }
+  const addEdge = (a, b) => {
+    if (!adjacency.has(a)) adjacency.set(a, new Set());
+    adjacency.get(a).add(b);
+  };
+  for (const l of links) { addEdge(l.source.id, l.target.id); addEdge(l.target.id, l.source.id); }
 
   document.getElementById('counts').textContent = `${nodes.length} files · ${links.length} edges`;
 }
