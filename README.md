@@ -55,6 +55,8 @@ interface RelatedFile {
 npm run build      # TypeScript コンパイル（dist/ に出力）
 npm test           # テスト実行（node:test + tsx）
 npx tsc --noEmit   # 型チェックのみ
+npm run lint       # コードフォーマットと静的解析
+npm run lint:fix   # コードフォーマットと静的解析を修正
 ```
 
 CI は GitHub Actions で Node 18 / 20 / 22 に対してビルドとテストを実行する。
