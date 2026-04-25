@@ -132,28 +132,21 @@ function update(minScore, topK) {
 
   linkSel = linkLayer.selectAll('line')
     .data(links, (d) => `${d.source.id}\t${d.target.id}`)
-    .join(
-      (enter) => enter.append('line').attr('class', 'link'),
-      (upd) => upd,
-      (exit) => exit.remove(),
-    )
+    .join('line')
+    .attr('class', 'link')
     .attr('stroke-width', (d) => 0.4 + d.score * 2.5);
 
   nodeSel = nodeLayer.selectAll('g.node')
     .data(nodes, (d) => d.id)
-    .join(
-      (enter) => {
-        const g = enter.append('g').attr('class', 'node').call(drag);
-        g.append('circle').attr('stroke', '#0f1115').attr('stroke-width', 1);
-        g.append('text').attr('x', 6).attr('y', 3);
-        g.on('mouseover', (_e, d) => { tooltip.style('opacity', 1).text(d.id); highlightNeighbors(d); })
-         .on('mousemove', (e) => { tooltip.style('left', `${e.clientX + 10}px`).style('top', `${e.clientY + 10}px`); })
-         .on('mouseout', () => { tooltip.style('opacity', 0); clearHighlight(); });
-        return g;
-      },
-      (upd) => upd,
-      (exit) => exit.remove(),
-    );
+    .join((enter) => {
+      const g = enter.append('g').attr('class', 'node').call(drag);
+      g.append('circle').attr('stroke', '#0f1115').attr('stroke-width', 1);
+      g.append('text').attr('x', 6).attr('y', 3);
+      g.on('mouseover', (_e, d) => { tooltip.style('opacity', 1).text(d.id); highlightNeighbors(d); })
+       .on('mousemove', (e) => { tooltip.style('left', `${e.clientX + 10}px`).style('top', `${e.clientY + 10}px`); })
+       .on('mouseout', () => { tooltip.style('opacity', 0); clearHighlight(); });
+      return g;
+    });
 
   nodeSel.select('circle')
     .attr('r', (d) => 3 + Math.sqrt(d.degree) * 1.4)
