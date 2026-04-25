@@ -10,9 +10,9 @@
 //   npx tsx examples/visualize <repo> [--out graph.html]
 //
 // <repo> accepts: owner/name, https://github.com/owner/name(.git),
-// git@github.com:owner/name.git, or a path to a local clone.
+// or git@github.com:owner/name.git.
 
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -72,7 +72,7 @@ function printHelpAndExit(code: number): never {
   const msg = `Usage: visualize.ts <repo> [options]
 
 Arguments:
-  <repo>                GitHub repo (owner/name, URL) or local path
+  <repo>                GitHub repo (owner/name or URL)
 
 Options:
   --out <file>          Output HTML path (default: graph.html)
@@ -96,11 +96,7 @@ interface RepoHandle extends AsyncDisposable {
   path: string
 }
 
-async function resolveRepoPath(repo: string): Promise<RepoHandle> {
-  if (existsSync(repo)) {
-    return { path: resolve(repo), [Symbol.asyncDispose]: async () => {} }
-  }
-
+async function cloneToTemp(repo: string): Promise<RepoHandle> {
   const url = normalizeRepoUrl(repo)
   const dir = await mkdtemp(join(tmpdir(), 'git-cochange-'))
   try {
@@ -147,7 +143,7 @@ function escapeHtml(s: string): string {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2))
-  await using repo = await resolveRepoPath(args.repo)
+  await using repo = await cloneToTemp(args.repo)
 
   console.log(`Analyzing ${repo.path} ...`)
   const analyzer = new Analyzer(repo.path)
