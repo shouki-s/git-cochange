@@ -3,49 +3,33 @@
 // git-cochange demo: clone a GitHub repository (or use a local one),
 // run the analyzer, and emit a self-contained HTML visualizing the
 // co-change graph as a D3 force-directed layout. Files with stronger
-// co-change relations are pulled closer together.
+// co-change relations are pulled closer together. The HTML has sliders
+// to filter by minimum score and per-file top-K.
 //
 // Usage:
-//   npx tsx examples/visualize.ts <repo> [--out graph.html]
-//                                        [--min-score 0.1]
-//                                        [--top-k 5]
-//                                        [--cache-dir .cache/repo]
+//   npx tsx examples/visualize <repo> [--out graph.html]
 //
 // <repo> accepts: owner/name, https://github.com/owner/name(.git),
 // git@github.com:owner/name.git, or a path to a local clone.
 
 import { existsSync, readFileSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import simpleGit from 'simple-git'
-import { Analyzer } from '../src/index'
+import { Analyzer } from '../../src/index'
 
 const TEMPLATE_PATH = join(__dirname, 'template.html')
 
 interface Args {
   repo: string
   out: string
-  minScore: number
-  topK: number
-  cacheDir: string | null
 }
 
-interface GraphNode {
-  id: string
-  group: string
-  degree: number
-}
-
-interface GraphLink {
-  source: string
-  target: string
+interface Pair {
+  a: string
+  b: string
   score: number
-}
-
-interface Graph {
-  nodes: GraphNode[]
-  links: GraphLink[]
 }
 
 function parseArgs(argv: string[]): Args {
@@ -75,13 +59,7 @@ function parseArgs(argv: string[]): Args {
     printHelpAndExit(1)
   }
 
-  return {
-    repo: positional[0],
-    out: opts.out ?? 'graph.html',
-    minScore: opts['min-score'] ? Number(opts['min-score']) : 0.1,
-    topK: opts['top-k'] ? Number(opts['top-k']) : 5,
-    cacheDir: opts['cache-dir'] ?? null,
-  }
+  return { repo: positional[0], out: opts.out ?? 'graph.html' }
 }
 
 function printHelpAndExit(code: number): never {
@@ -92,9 +70,6 @@ Arguments:
 
 Options:
   --out <file>          Output HTML path (default: graph.html)
-  --min-score <n>       Drop edges with score below n (default: 0.1)
-  --top-k <n>           Keep up to top-K related files per file (default: 5)
-  --cache-dir <dir>     Reuse this directory for the clone (default: temp)
   -h, --help            Show this help
 `
   process.stdout.write(msg)
@@ -111,69 +86,39 @@ function normalizeRepoUrl(input: string): string {
   throw new Error(`Cannot interpret as a GitHub repo: ${input}`)
 }
 
-async function resolveRepoPath(
-  repo: string,
-  cacheDir: string | null,
-): Promise<{ path: string; cleanup: () => Promise<void> }> {
+async function resolveRepoPath(repo: string): Promise<{ path: string; cleanup: () => Promise<void> }> {
   if (existsSync(repo)) {
     return { path: resolve(repo), cleanup: async () => {} }
   }
 
   const url = normalizeRepoUrl(repo)
-  const dir = cacheDir ? resolve(cacheDir) : await mkdtemp(join(tmpdir(), 'git-cochange-'))
-
-  if (cacheDir) await mkdir(dir, { recursive: true })
-
-  if (existsSync(join(dir, '.git'))) {
-    console.log(`Using existing clone at ${dir}`)
-  } else {
-    console.log(`Cloning ${url} → ${dir}`)
-    await simpleGit().clone(url, dir)
-  }
-
-  const cleanup = cacheDir ? async () => {} : async () => rm(dir, { recursive: true, force: true })
-  return { path: dir, cleanup }
+  const dir = await mkdtemp(join(tmpdir(), 'git-cochange-'))
+  console.log(`Cloning ${url} → ${dir}`)
+  await simpleGit().clone(url, dir)
+  return { path: dir, cleanup: () => rm(dir, { recursive: true, force: true }) }
 }
 
-function buildGraph(analyzer: Analyzer, minScore: number, topK: number): Graph {
-  const files = analyzer.getFiles()
-
-  const links: GraphLink[] = []
+function buildPairs(analyzer: Analyzer): Pair[] {
+  const pairs: Pair[] = []
   const seen = new Set<string>()
 
-  for (const file of files) {
-    const related = analyzer.getRelated(file).slice(0, topK)
-    for (const r of related) {
-      if (r.score < minScore) continue
-      const key = file < r.file ? `${file} ${r.file}` : `${r.file} ${file}`
+  for (const file of analyzer.getFiles()) {
+    for (const r of analyzer.getRelated(file)) {
+      const [a, b] = file < r.file ? [file, r.file] : [r.file, file]
+      const key = `${a}\t${b}`
       if (seen.has(key)) continue
       seen.add(key)
-      links.push({ source: file, target: r.file, score: r.score })
+      pairs.push({ a, b, score: r.score })
     }
   }
 
-  const degree = new Map<string, number>()
-  for (const l of links) {
-    degree.set(l.source, (degree.get(l.source) ?? 0) + 1)
-    degree.set(l.target, (degree.get(l.target) ?? 0) + 1)
-  }
-
-  const nodes: GraphNode[] = []
-  for (const id of degree.keys()) {
-    nodes.push({ id, group: topLevelDir(id), degree: degree.get(id) ?? 0 })
-  }
-
-  return { nodes, links }
+  pairs.sort((x, y) => y.score - x.score)
+  return pairs
 }
 
-function topLevelDir(path: string): string {
-  const idx = path.indexOf('/')
-  return idx === -1 ? '(root)' : path.slice(0, idx)
-}
-
-function renderHtml(graph: Graph, title: string): string {
+function renderHtml(pairs: Pair[], title: string): string {
   // Escape `<` so the JSON cannot prematurely close the embedding <script>.
-  const dataJson = JSON.stringify(graph).replace(/</g, '\\u003c')
+  const dataJson = JSON.stringify({ pairs }).replace(/</g, '\\u003c')
   const template = readFileSync(TEMPLATE_PATH, 'utf-8')
   // The data placeholder is quoted in the template so it parses as a valid JSON
   // string for biome; we replace including the quotes.
@@ -187,18 +132,17 @@ function escapeHtml(s: string): string {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2))
-
-  const { path: repoPath, cleanup } = await resolveRepoPath(args.repo, args.cacheDir)
+  const { path: repoPath, cleanup } = await resolveRepoPath(args.repo)
 
   try {
-    console.log(`Analyzing ${repoPath} …`)
+    console.log(`Analyzing ${repoPath} ...`)
     const analyzer = new Analyzer(repoPath)
     await analyzer.analyze()
 
-    const graph = buildGraph(analyzer, args.minScore, args.topK)
-    console.log(`Graph: ${graph.nodes.length} nodes, ${graph.links.length} edges`)
+    const pairs = buildPairs(analyzer)
+    console.log(`Embedded ${pairs.length} pairs (filtering happens in the browser)`)
 
-    const html = renderHtml(graph, args.repo)
+    const html = renderHtml(pairs, args.repo)
     const outPath = resolve(args.out)
     await writeFile(outPath, html, 'utf-8')
     console.log(`Wrote ${outPath}`)

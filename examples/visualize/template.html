@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>git-cochange — __TITLE__</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0f1115; color: #e6e6e6;
+               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  #header { position: fixed; top: 0; left: 0; right: 0; padding: 10px 14px;
+            background: rgba(15, 17, 21, 0.85); border-bottom: 1px solid #222;
+            display: flex; gap: 14px; align-items: center; flex-wrap: wrap; z-index: 10; }
+  #header h1 { margin: 0; font-size: 14px; font-weight: 600; }
+  #header .meta { font-size: 12px; color: #888; }
+  #header label { font-size: 12px; color: #aaa; display: flex; align-items: center; gap: 6px; }
+  #header label .val { color: #e6e6e6; min-width: 28px; text-align: right; font-variant-numeric: tabular-nums; }
+  #header input[type="range"] { width: 120px; }
+  #header input[type="text"] { flex: 1; min-width: 140px; max-width: 240px; padding: 4px 8px; background: #1a1d24;
+                               color: #e6e6e6; border: 1px solid #333; border-radius: 4px; font-size: 12px; }
+  #graph { width: 100vw; height: 100vh; display: block; }
+  #tooltip { position: fixed; pointer-events: none; padding: 4px 8px;
+             background: #1a1d24; border: 1px solid #333; border-radius: 4px;
+             font-size: 12px; opacity: 0; transition: opacity 0.1s; z-index: 20; }
+  .node { cursor: pointer; }
+  .node text { font-size: 10px; fill: #ccc; pointer-events: none; }
+  .link { stroke-opacity: 0.5; }
+  .dim { opacity: 0.08; }
+</style>
+</head>
+<body>
+<div id="header">
+  <h1>git-cochange</h1>
+  <span class="meta">__TITLE__</span>
+  <label>min-score
+    <input id="min-score" type="range" min="0" max="1" step="0.01" value="0.1">
+    <span id="min-score-val" class="val">0.10</span>
+  </label>
+  <label>top-K
+    <input id="top-k" type="range" min="1" max="20" step="1" value="5">
+    <span id="top-k-val" class="val">5</span>
+  </label>
+  <input id="search" type="text" placeholder="filter files…" />
+  <span class="meta" id="counts"></span>
+</div>
+<svg id="graph" role="img" aria-label="git-cochange graph"></svg>
+<div id="tooltip"></div>
+<script id="graph-data" type="application/json">"__GRAPH_DATA__"</script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script>
+const data = JSON.parse(document.getElementById('graph-data').textContent);
+const allPairs = data.pairs; // sorted by score desc, deduped (a < b)
+
+const svg = d3.select('#graph');
+const tooltip = d3.select('#tooltip');
+const width = window.innerWidth;
+const height = window.innerHeight;
+
+const topLevelDir = (p) => {
+  const i = p.indexOf('/');
+  return i === -1 ? '(root)' : p.slice(0, i);
+};
+
+const allFiles = new Set();
+for (const p of allPairs) { allFiles.add(p.a); allFiles.add(p.b); }
+const groups = Array.from(new Set(Array.from(allFiles).map(topLevelDir)));
+const color = d3.scaleOrdinal(groups, d3.schemeTableau10);
+
+// Persistent node objects so x/y are preserved across filter changes.
+const nodeIndex = new Map();
+const getNode = (id) => {
+  let n = nodeIndex.get(id);
+  if (!n) { n = { id, group: topLevelDir(id) }; nodeIndex.set(id, n); }
+  return n;
+};
+
+function buildGraph(minScore, topK) {
+  const counts = new Map();
+  const links = [];
+  for (const p of allPairs) {
+    if (p.score < minScore) break; // pairs are sorted desc
+    const ca = counts.get(p.a) ?? 0;
+    const cb = counts.get(p.b) ?? 0;
+    if (ca < topK || cb < topK) {
+      links.push({ source: getNode(p.a), target: getNode(p.b), score: p.score });
+      counts.set(p.a, ca + 1);
+      counts.set(p.b, cb + 1);
+    }
+  }
+  const degree = new Map();
+  for (const l of links) {
+    degree.set(l.source.id, (degree.get(l.source.id) ?? 0) + 1);
+    degree.set(l.target.id, (degree.get(l.target.id) ?? 0) + 1);
+  }
+  const nodes = [];
+  for (const [id, d] of degree) {
+    const n = getNode(id);
+    n.degree = d;
+    nodes.push(n);
+  }
+  return { nodes, links };
+}
+
+const linkDistance = (d) => 30 + 120 * (1 - Math.min(1, d.score));
+const linkStrength = (d) => Math.max(0.05, Math.min(1, d.score));
+
+const simulation = d3.forceSimulation()
+  .force('link', d3.forceLink().id((d) => d.id).distance(linkDistance).strength(linkStrength))
+  .force('charge', d3.forceManyBody().strength(-80))
+  .force('center', d3.forceCenter(width / 2, height / 2))
+  .force('collide', d3.forceCollide().radius((d) => 4 + Math.sqrt(d.degree) * 2));
+
+const root = svg.append('g');
+const linkLayer = root.append('g').attr('stroke', '#888');
+const nodeLayer = root.append('g');
+
+let linkSel = linkLayer.selectAll('line');
+let nodeSel = nodeLayer.selectAll('g.node');
+let adjacency = new Map();
+
+const drag = d3.drag()
+  .on('start', (event, d) => {
+    if (!event.active) simulation.alphaTarget(0.3).restart();
+    d.fx = d.x; d.fy = d.y;
+  })
+  .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
+  .on('end', (event, d) => {
+    if (!event.active) simulation.alphaTarget(0);
+    d.fx = null; d.fy = null;
+  });
+
+function update(minScore, topK) {
+  const { nodes, links } = buildGraph(minScore, topK);
+
+  linkSel = linkLayer.selectAll('line')
+    .data(links, (d) => `${d.source.id}\t${d.target.id}`)
+    .join(
+      (enter) => enter.append('line').attr('class', 'link'),
+      (upd) => upd,
+      (exit) => exit.remove(),
+    )
+    .attr('stroke-width', (d) => 0.4 + d.score * 2.5);
+
+  nodeSel = nodeLayer.selectAll('g.node')
+    .data(nodes, (d) => d.id)
+    .join(
+      (enter) => {
+        const g = enter.append('g').attr('class', 'node').call(drag);
+        g.append('circle').attr('stroke', '#0f1115').attr('stroke-width', 1);
+        g.append('text').attr('x', 6).attr('y', 3);
+        g.on('mouseover', (_e, d) => { tooltip.style('opacity', 1).text(d.id); highlightNeighbors(d); })
+         .on('mousemove', (e) => { tooltip.style('left', `${e.clientX + 10}px`).style('top', `${e.clientY + 10}px`); })
+         .on('mouseout', () => { tooltip.style('opacity', 0); clearHighlight(); });
+        return g;
+      },
+      (upd) => upd,
+      (exit) => exit.remove(),
+    );
+
+  nodeSel.select('circle')
+    .attr('r', (d) => 3 + Math.sqrt(d.degree) * 1.4)
+    .attr('fill', (d) => color(d.group));
+  nodeSel.select('text').text((d) => d.id.split('/').pop());
+
+  simulation.nodes(nodes);
+  simulation.force('link').links(links);
+  simulation.alpha(0.6).restart();
+
+  adjacency = new Map();
+  for (const l of links) {
+    if (!adjacency.has(l.source.id)) adjacency.set(l.source.id, new Set());
+    if (!adjacency.has(l.target.id)) adjacency.set(l.target.id, new Set());
+    adjacency.get(l.source.id).add(l.target.id);
+    adjacency.get(l.target.id).add(l.source.id);
+  }
+
+  document.getElementById('counts').textContent = `${nodes.length} files · ${links.length} edges`;
+}
+
+simulation.on('tick', () => {
+  linkSel
+    .attr('x1', (d) => d.source.x).attr('y1', (d) => d.source.y)
+    .attr('x2', (d) => d.target.x).attr('y2', (d) => d.target.y);
+  nodeSel.attr('transform', (d) => `translate(${d.x},${d.y})`);
+});
+
+svg.call(d3.zoom().scaleExtent([0.1, 8]).on('zoom', (event) => {
+  root.attr('transform', event.transform);
+}));
+
+function highlightNeighbors(d) {
+  const neighbors = adjacency.get(d.id) ?? new Set();
+  nodeSel.classed('dim', (n) => n.id !== d.id && !neighbors.has(n.id));
+  linkSel.classed('dim', (l) => l.source.id !== d.id && l.target.id !== d.id);
+}
+
+function clearHighlight() {
+  nodeSel.classed('dim', false);
+  linkSel.classed('dim', false);
+}
+
+const minScoreInput = document.getElementById('min-score');
+const minScoreVal = document.getElementById('min-score-val');
+const topKInput = document.getElementById('top-k');
+const topKVal = document.getElementById('top-k-val');
+const searchInput = document.getElementById('search');
+
+let pendingTimer = null;
+function scheduleUpdate() {
+  if (pendingTimer) clearTimeout(pendingTimer);
+  pendingTimer = setTimeout(() => {
+    pendingTimer = null;
+    update(parseFloat(minScoreInput.value), parseInt(topKInput.value, 10));
+    applySearch();
+  }, 80);
+}
+
+minScoreInput.addEventListener('input', () => {
+  minScoreVal.textContent = parseFloat(minScoreInput.value).toFixed(2);
+  scheduleUpdate();
+});
+topKInput.addEventListener('input', () => {
+  topKVal.textContent = topKInput.value;
+  scheduleUpdate();
+});
+
+function applySearch() {
+  const q = searchInput.value.toLowerCase();
+  if (!q) { clearHighlight(); return; }
+  nodeSel.classed('dim', (n) => !n.id.toLowerCase().includes(q));
+  linkSel.classed('dim', (l) =>
+    !l.source.id.toLowerCase().includes(q) && !l.target.id.toLowerCase().includes(q));
+}
+searchInput.addEventListener('input', applySearch);
+
+update(parseFloat(minScoreInput.value), parseInt(topKInput.value, 10));
+</script>
+</body>
+</html>
