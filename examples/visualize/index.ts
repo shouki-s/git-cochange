@@ -11,10 +11,7 @@ import { Analyzer } from '../../src/index'
 
 const TEMPLATE_PATH = join(__dirname, 'template.html')
 
-// Cap related-files-per-file at the embedding stage so the JSON payload
-// stays roughly O(N) instead of O(N^2) on large repos. Must match the
-// HTML slider's top-K max (any value beyond this would be unrepresentable
-// anyway because the cap drops those pairs from the embedding).
+// Bounds the embedded payload to O(N); must match the HTML slider's top-K max.
 const TOP_K_CAP = 20
 
 interface Args {
@@ -89,12 +86,10 @@ function buildPairs(analyzer: Analyzer): Pair[] {
 }
 
 function renderHtml(pairs: Pair[], title: string): string {
-  // Escape `<` so the JSON cannot prematurely close the embedding <script>.
+  // Escape `<` so the JSON can't terminate the embedding <script>.
   const dataJson = JSON.stringify({ pairs }).replace(/</g, '\\u003c')
   const template = readFileSync(TEMPLATE_PATH, 'utf-8')
-  // The data placeholder is quoted in the template so it parses as a valid JSON
-  // string for biome; we replace including the quotes.
-  // split/join avoids both ES2021 dependency and `$` substitution in replacement strings.
+  // split/join avoids the `$` substitution traps of String.replace.
   return template.split('"__GRAPH_DATA__"').join(dataJson).split('__TITLE__').join(escapeHtml(title))
 }
 
