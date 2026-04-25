@@ -27,30 +27,24 @@ export async function getTrackedFiles(repoPath: string): Promise<Set<string>> {
 }
 
 export function parseLogOutput(output: string): CommitInfo[] {
+  if (!output) return []
+
+  // git log emits one block per commit, each prefixed with a literal "COMMIT"
+  // marker line. Strip the leading marker, then split on the between-commit
+  // markers to get one block per commit.
+  const body = output.startsWith('COMMIT\n') ? output.slice('COMMIT\n'.length) : output
+  const blocks = body.split('\nCOMMIT\n')
+
   const commits: CommitInfo[] = []
-  const lines = output.split('\n')
-  let i = 0
+  for (const block of blocks) {
+    const [emailLine, tsLine, ...fileLines] = block.split('\n')
+    const authorEmail = emailLine?.trim() ?? ''
+    const timestamp = parseInt(tsLine?.trim() ?? '', 10)
+    if (!authorEmail || Number.isNaN(timestamp)) continue
 
-  while (i < lines.length) {
-    if (lines[i] === 'COMMIT') {
-      const authorEmail = lines[i + 1]?.trim() ?? ''
-      const timestamp = parseInt(lines[i + 2]?.trim() ?? '', 10)
-      i += 3
-
-      if (!authorEmail || Number.isNaN(timestamp)) continue
-
-      const files: string[] = []
-      while (i < lines.length && lines[i] !== 'COMMIT') {
-        const line = lines[i].trim()
-        if (line) files.push(line)
-        i++
-      }
-
-      if (files.length > 0) {
-        commits.push({ timestamp, authorEmail, files })
-      }
-    } else {
-      i++
+    const files = fileLines.map((l) => l.trim()).filter(Boolean)
+    if (files.length > 0) {
+      commits.push({ timestamp, authorEmail, files })
     }
   }
 

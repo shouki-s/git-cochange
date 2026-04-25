@@ -1,5 +1,5 @@
 import { fetchCommits, getTrackedFiles } from './git'
-import { computeScores, normalizeScore, type ScoreMap } from './scorer'
+import { computeScores, type ScoreMap } from './scorer'
 
 export interface AnalyzerOptions {
   ref?: string
@@ -16,7 +16,6 @@ export class Analyzer {
   private readonly ref: string
   private readonly includeMergeCommits: boolean
   private scoreMap: ScoreMap | null = null
-  private trackedFiles: Set<string> | null = null
 
   constructor(repoPath: string, options?: AnalyzerOptions) {
     this.repoPath = repoPath
@@ -37,32 +36,30 @@ export class Analyzer {
       .map((c) => ({ ...c, files: c.files.filter((f) => trackedFiles.has(f)) }))
       .filter((c) => c.files.length > 0)
 
-    this.trackedFiles = trackedFiles
     this.scoreMap = computeScores(filteredCommits)
   }
 
   getFiles(): string[] {
-    if (!this.scoreMap || !this.trackedFiles) {
-      throw new Error('analyze() must be called before getFiles()')
-    }
-    return Array.from(this.scoreMap.self.keys()).filter((f) => this.trackedFiles?.has(f) ?? false)
+    const scoreMap = this.ensureAnalyzed()
+    return Array.from(scoreMap.files())
   }
 
   getRelated(file: string): RelatedFile[] {
-    if (!this.scoreMap || !this.trackedFiles) {
-      throw new Error('analyze() must be called before getRelated()')
-    }
-
-    const inner = this.scoreMap.raw.get(file)
-    if (!inner) return []
+    const scoreMap = this.ensureAnalyzed()
 
     const results: RelatedFile[] = []
-    for (const otherFile of inner.keys()) {
-      if (!this.trackedFiles.has(otherFile)) continue
-      const score = normalizeScore(this.scoreMap, file, otherFile)
+    for (const otherFile of scoreMap.related(file)) {
+      const score = scoreMap.normalize(file, otherFile)
       if (score > 0) results.push({ file: otherFile, score })
     }
 
     return results.sort((a, b) => b.score - a.score)
+  }
+
+  private ensureAnalyzed(): ScoreMap {
+    if (!this.scoreMap) {
+      throw new Error('analyze() must be called before getFiles() / getRelated()')
+    }
+    return this.scoreMap
   }
 }
