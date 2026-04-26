@@ -21,6 +21,15 @@ const related = analyzer.getRelated('src/api.ts')
 // → [{ file: 'src/types.ts', score: 0.91 }, ...]
 ```
 
+## Examples
+
+`examples/visualize/` に、関連度を D3 force-directed グラフとして可視化する HTML を生成するデモを同梱。
+
+```bash
+npx tsx examples/visualize <owner/name>
+# → graph.html が生成される。ブラウザで開くと min-score / top-K のスライダで動的にフィルタできる。
+```
+
 ## API
 
 ### `new Analyzer(repoPath, options?)`
@@ -59,4 +68,4 @@ npm run lint       # コードフォーマットと静的解析
 npm run lint:fix   # コードフォーマットと静的解析を修正
 ```
 
-CI は GitHub Actions で Node 18 / 20 / 22 に対してビルドとテストを実行する。
+CI は GitHub Actions で Node 20 / 22 に対してビルドとテストを実行する。
