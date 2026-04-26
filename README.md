@@ -38,6 +38,11 @@ npx tsx examples/visualize <owner/name>
 |---|---|---|---|
 | `ref` | `string` | `'HEAD'` | 解析対象の git ref |
 | `includeMergeCommits` | `boolean` | `false` | マージコミットを含めるか |
+| `cache` | `boolean \| { path?: string }` | `true` | ディスクキャッシュ。`false` で無効化、`{ path }` で保存先を変更可。デフォルトは `<git-dir>/git-cochange/cache.json` |
+
+### キャッシュ
+
+2 回目以降の `analyze()` は前回のスコアマップを再利用し、新規コミット分のみを増分計算する。履歴書き換え（force-push / rebase）を検知すると自動で全再計算する。
 
 ### `analyzer.analyze(): Promise<void>`
 
