@@ -38,11 +38,17 @@ npx tsx examples/visualize <owner/name>
 |---|---|---|---|
 | `ref` | `string` | `'HEAD'` | 解析対象の git ref |
 | `includeMergeCommits` | `boolean` | `false` | マージコミットを含めるか |
-| `cache` | `boolean \| { path?: string }` | `true` | ディスクキャッシュ。`false` で無効化、`{ path }` で保存先を変更可。デフォルトは `<git-dir>/git-cochange/cache.json` |
+| `cache` | `boolean \| { dir?: string; maxEntries?: number }` | `true` | ディスクキャッシュ。`false` で無効化、`{ dir }` で保存先ディレクトリを変更可、`{ maxEntries }` で LRU 上限を変更可（デフォルト 16）。既定パスは `<git-dir>/git-cochange/` |
 
 ### キャッシュ
 
-2 回目以降の `analyze()` は前回のスコアマップを再利用し、新規コミット分のみを増分計算する。履歴書き換え（force-push / rebase）を検知すると自動で全再計算する。
+2 回目以降の `analyze()` は HEAD ごとに 1 ファイルとして保存されたエントリを参照する。
+
+- 同じ HEAD なら直接ヒット（再計算なし）
+- 祖先となる HEAD のエントリがあれば、その差分コミットだけを増分計算（forward incremental）
+- どちらも適用できなければ全再計算
+
+ブランチを切り替えても他ブランチのエントリは消えない。エントリ数が `maxEntries` を超えると mtime ベースの LRU で古いものから削除される。
 
 ### `analyzer.analyze(): Promise<void>`
 

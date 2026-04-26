@@ -54,6 +54,12 @@ export async function isAncestor(repoPath: string, ancestor: string, descendant:
   }
 }
 
+export async function countCommitsBetween(repoPath: string, ancestor: string, descendant: string): Promise<number> {
+  const git = simpleGit(repoPath)
+  const out = await git.raw(['rev-list', '--count', `${ancestor}..${descendant}`])
+  return parseInt(out.trim(), 10)
+}
+
 export function parseLogOutput(output: string): CommitInfo[] {
   if (!output) return []
 
