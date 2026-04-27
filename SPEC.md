@@ -148,8 +148,72 @@ const allPairs = files.flatMap(f =>
 
 ## 9. キャッシュ
 
-- **現スコープ外**。ただし将来フェーズで必ず実装する。
-- 現状は `analyze()` の結果をインスタンスのメモリに保持するのみ。ディスク永続化は行わない。
+### 9.1 概要
+
+- `analyze()` の結果をディスクに永続化し、2 回目以降の `analyze()` を高速化する。
+- **デフォルト有効**。`cache: false` で無効化できる。
+- **複数スロット方式**: 複数の HEAD（=ブランチ切替や複数 worktree）で共存できる。あるブランチで `analyze()` しても、他ブランチのキャッシュは消えない。
+
+### 9.2 API
+
+```ts
+interface AnalyzerOptions {
+  // ...
+  cache?: boolean | { dir?: string; maxEntries?: number }
+}
+```
+
+- `true` / 未指定: 既定ディレクトリ（`<git-dir>/git-cochange/`）を使用
+- `false`: キャッシュ無効
+- `{ dir }`: キャッシュディレクトリを変更
+- `{ maxEntries }`: LRU 上限を変更（デフォルト 16）
+
+> 旧仕様の `{ path }`（単一ファイル指定）は廃止。複数スロット化に伴い「ディレクトリ」をユーザーが指定する。
+
+### 9.3 ストレージレイアウト
+
+```
+<cache-dir>/
+  index.json                      ← LRU 順序とエントリ一覧（任意）
+  <slot-id>.json                  ← 1 ファイル = 1 エントリ
+  <slot-id>.json
+  ...
+```
+
+- **slot-id**: `<headSha>-<optionsTag>` 形式（例: `a1b2c3...-nm` / `a1b2c3...-m`）。`optionsTag` は `includeMergeCommits` を 1 文字で表す
+- 各エントリは「`headSha` / `includeMergeCommits` / 累積 `ScoreMap` / 直近 5τ コミットのテールバッファ / `cacheTimestamp` / ライブラリ version」を保持する
+- `index.json` はメタデータのみ（slot-id 一覧と最終アクセス時刻）。本体データを読まずに LRU 判定するための補助。破損してもエントリ群から再構築できる
+
+### 9.4 解決順序（`analyze()` の挙動）
+
+現 `(headSha, includeMergeCommits)` に対して、以下の順で再利用を試みる:
+
+1. **直接ヒット**: 同じ slot-id のエントリがあればそのまま再利用（計算なし、`index.json` の最終アクセス時刻のみ更新）
+2. **祖先からの forward incremental**: 既存エントリのうち `includeMergeCommits` が一致し、かつ「現 HEAD の祖先」になっているものを `git merge-base --is-ancestor` で抽出。複数あれば最も近い祖先（`rev-list --count <ancestor>..HEAD` 最小）を選び、その差分コミットを増分更新（§9.5）。新エントリとして書き出す（**祖先エントリは削除しない**）
+3. **全再計算**: 上記いずれも適用できなければ、空状態から計算して新エントリとして書き出す
+
+書き出し後、エントリ数が `maxEntries`（既定 16）を超えていれば最終アクセス時刻が古いものから削除する（LRU eviction）。
+
+> 子孫 → 祖先方向の差分（backward incremental）は **提供しない**。多くのケースで LRU により祖先側エントリも残るため、forward incremental だけで実用的にカバーできる。
+
+### 9.5 増分更新の仕組み
+
+スコアは加法的（`raw(A,B) = Σ contributions`）なので、祖先エントリの `ScoreMap` に対し、`<ancestor>..HEAD` の新規コミット群の寄与を加算するだけで現 HEAD の `ScoreMap` が得られる。
+
+ただし新規コミットと祖先側コミットの間のクロス項（5τ 以内）を計算するため、祖先エントリには **直近 5τ コミットのテールバッファ** を含めておく。新規コミットの最古タイムスタンプがテールバッファの窓より外側にある場合は、増分更新を諦めて全再計算にフォールバックする。
+
+### 9.6 無効化と全再計算のトリガ
+
+以下のいずれかで該当エントリの再利用を諦める（→ 新規エントリ作成）:
+
+- ライブラリ version 不一致（古いエントリは削除）
+- `index.json` または該当エントリの JSON 破損
+- 祖先関係の崩壊（force-push 等）— ただし**他ブランチ由来のエントリには影響しない**
+
+### 9.7 削除済みファイルの扱い（実装の補足）
+
+- 内部の `ScoreMap` は「過去に存在した全ファイル」を含む。削除済みファイル除外（§7.4）はクエリ時（`getFiles()` / `getRelated()`）で `git ls-files` の結果と突き合わせて適用する
+- これによりキャッシュはファイル削除のたびに無効化されない
 
 ## 10. 非機能要件
 
