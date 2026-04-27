@@ -1,53 +1,62 @@
-# git-cochange 仕様書
+# git-cochange specification
 
-git のコミットログを解析し、ファイル間の関連度（co-change / logical coupling）を算出するライブラリ。
+A library that analyzes git commit logs to compute relevance (co-change /
+logical coupling) between files.
 
-本ドキュメントは **合意済みの仕様のみ** を記録する。未決事項は `TODO` （Claude Code のタスクリスト）側で管理する。
+This document records **only agreed-upon specifications**. Open items are
+tracked separately in `TODO` (the Claude Code task list).
 
 ---
 
-## 1. 概要
+## 1. Overview
 
-git のコミットログを入力として、ファイル間の関連度および任意のファイルに対する関連ファイル一覧を算出する、**汎用ライブラリ**。
+A **general-purpose library** that takes a git commit log as input and
+computes pairwise file relevance and the related files for a given file.
 
-特定の利用形態（IDE 拡張、CI ツール、可視化ツール等）には依存しない。上位ツールはこのライブラリを基盤として構築する。
+It is independent of any specific consumer (IDE extensions, CI tools,
+visualization tools, etc.). Higher-level tools should be built on top of this
+library.
 
-## 2. ユースケース
+## 2. Use cases
 
-本ライブラリ自身は「関連度の算出・出力」のみを責務とする。想定される上位利用:
+The library itself is responsible only for "computing and exposing relevance".
+Anticipated downstream uses:
 
-- エディタ/IDE 拡張 （将来的に別プロジェクトで実装予定）
-- CI でのレビュー補助
-- アーキテクチャ可視化
+- Editor / IDE extensions (planned as a separate project in the future)
+- Review assistance in CI
+- Architecture visualization
 
-ただし、これらの具体的な利用形態に引きずられた API 設計・機能は含めない。
+That said, the API and feature set must not be skewed toward any specific
+consumer.
 
-## 3. 用語定義
+## 3. Terminology
 
-- **co-change / 共変化**: 同一コミット内で複数ファイルが変更されること。
-- **関連度スコア**: 2 ファイル間の共変化の強さを示す数値。
+- **co-change**: multiple files modified within the same commit.
+- **relevance score**: a numeric value indicating the strength of co-change
+  between two files.
 
-## 4. 入力
+## 4. Input
 
-- リポジトリパス（絶対パス）
-- オプション（`AnalyzerOptions` 参照）
+- Repository path (absolute)
+- Options (see `AnalyzerOptions`)
 
-## 4.1 集計粒度
+## 4.1 Aggregation granularity
 
-- **ファイル単位のみ**。ディレクトリ単位の集計は提供しない。
-- ディレクトリ単位の集計が必要な場合は呼び出し側で行う。
+- **File-level only.** Directory-level aggregation is not provided.
+- If directory-level aggregation is needed, the caller must do it themselves.
 
-## 5. 出力
+## 5. Output
 
-（未記載）
+(Not documented here.)
 
-## 6. スコアリング
+## 6. Scoring
 
-### 6.1 モデル
+### 6.1 Model
 
-各コミットを `(timestamp, author_email)` のペアとして扱う。
+Each commit is treated as a `(timestamp, author_email)` pair.
 
-- `C(X)`: ファイル X に触れたコミットの集合。各要素は `(t, a)` = (時刻, author email)
+- `C(X)`: the set of commits that touched file X. Each element is `(t, a)` =
+  (timestamp, author email).
 
 ```
 raw(A, B) = Σ_{(tᵢ,aᵢ)∈C(A)} Σ_{(tⱼ,aⱼ)∈C(B)}  [aᵢ = aⱼ] · decay(|tᵢ - tⱼ|)
@@ -58,55 +67,64 @@ decay(Δt) = exp(-Δt / τ)   if Δt < 5τ
 score(A, B) = raw(A, B) / sqrt(raw(A,A) × raw(B,B))
 ```
 
-`[aᵢ = aⱼ]` はアイバーソン記号（同一 author email なら 1、異なれば 0）。
+`[aᵢ = aⱼ]` is the Iverson bracket (1 if author emails match, 0 otherwise).
 
-### 6.2 パラメータ
+### 6.2 Parameters
 
-| パラメータ | 値 | 意味 |
+| Parameter | Value | Meaning |
 |---|---|---|
-| τ (減衰時定数) | 8時間（固定） | 1日後の寄与は約 0.05（弱い関連） |
-| 打ち切り | 5τ = 40時間 | これ以上離れたペアは計算スキップ（最適化） |
+| τ (decay time constant) | 8 hours (fixed) | Contribution one day later is about 0.05 (weak relation) |
+| Cutoff | 5τ = 40 hours | Pairs farther apart than this are skipped (optimization) |
 
-### 6.3 スコアの性質
+### 6.3 Score properties
 
-- 値域: 0〜1（余弦類似度と同じ構造）
-- 対称: `score(A, B) = score(B, A)` → 無向グラフとして扱える
-- 同一コミット (`Δt=0, aᵢ=aⱼ`): `decay(0) = 1` で最大寄与
-- Author が異なる近接コミットは寄与しない
+- Range: 0–1 (same structure as cosine similarity)
+- Symmetric: `score(A, B) = score(B, A)` → can be treated as an undirected
+  graph
+- Same commit (`Δt=0, aᵢ=aⱼ`): `decay(0) = 1`, the maximum contribution
+- Nearby commits with different authors do not contribute
 
-## 7. フィルタリング
+## 7. Filtering
 
-### 7.1 解析対象コミット
+### 7.1 Commits to analyze
 
-- デフォルト: `HEAD` からたどれる全コミット（マージ済みブランチのコミットを含む）
-- 解析対象 ref はユーザーが指定可能
-- マージコミット: **デフォルト除外**（`--no-merges` 相当）。オプションで含めることも可
+- Default: all commits reachable from `HEAD` (including those from
+  already-merged branches)
+- The analyzed ref is user-configurable
+- Merge commits: **excluded by default** (equivalent to `--no-merges`). Can be
+  included via an option.
 
-### 7.2 フィルタリング（将来拡張）
+### 7.2 Filtering (future extensions)
 
-以下は現スコープ外。将来的に `AnalyzerOptions` に追加する可能性がある:
+The following are out of scope for now. They may be added to
+`AnalyzerOptions` in the future:
 
-- **期間フィルタ** (`since` / `until`): 大規模リポジトリでのパフォーマンス対策として優先度高
-- **ファイルパターン除外** (`excludeFiles`): `*.lock` 等のノイズ除去
+- **Time-range filter** (`since` / `until`): high priority as a performance
+  measure for large repositories
+- **File-pattern exclusion** (`excludeFiles`): for noise reduction such as
+  `*.lock`
 
-### 7.3 リネーム/移動の扱い
+### 7.3 Renames / moves
 
-- **追跡しない**。現在のファイルパスでのコミット履歴のみを対象とする。
-- リネーム前の履歴は引き継がない。
+- **Not tracked.** Only the commit history under the current path is
+  considered.
+- History prior to a rename is not carried over.
 
-### 7.4 削除済みファイルの扱い
+### 7.4 Deleted files
 
-- **含めない**。`getFiles()` は現存ファイルのみを返す。
-- 削除済みファイルに関するスコアは計算・保持しない。
+- **Not included.** `getFiles()` returns only currently existing files.
+- Scores involving deleted files are neither computed nor retained.
 
-### 7.5 大規模コミットの扱い
+### 7.5 Large commits
 
-- **現状: 何もしない**。スコアリングモデルに委ねる。
-- 将来的に問題が確認された場合は、N ファイル超のコミットをスキップする前処理（データクレンジング）で対応する。スコアリング式は変更しない。
+- **Currently no special handling.** Left to the scoring model.
+- If problems are observed in the future, this will be addressed by a
+  preprocessing step (data cleansing) that skips commits touching more than N
+  files. The scoring formula will not change.
 
 ## 8. API
 
-### 8.1 クラス
+### 8.1 Classes
 
 ```ts
 class Analyzer {
@@ -117,42 +135,49 @@ class Analyzer {
 }
 
 interface AnalyzerOptions {
-  ref?: string               // 解析対象 ref（デフォルト: 'HEAD'）
-  includeMergeCommits?: boolean  // マージコミットを含めるか（デフォルト: false）
+  ref?: string               // ref to analyze (default: 'HEAD')
+  includeMergeCommits?: boolean  // include merge commits (default: false)
 }
 
 interface RelatedFile {
-  file: string   // リポジトリルートからの相対パス
-  score: number  // 0〜1
+  file: string   // path relative to the repository root
+  score: number  // 0–1
 }
 ```
 
-### 8.2 動作仕様
+### 8.2 Behavior
 
-- `analyze()`: git ログ取得 → 全ペアのスコアを計算して内部に保持。非同期。
-- `getFiles()`: スコアリングされた全ファイルパスを返す。同期。
-- `getRelated(file)`: 指定ファイルの関連ファイルをスコア降順で返す。同期。
-- `analyze()` 未呼び出しで `getFiles()` / `getRelated()` を呼ぶと例外。
+- `analyze()`: fetch the git log → compute scores for all pairs and retain
+  them in memory. Asynchronous.
+- `getFiles()`: returns all scored file paths. Synchronous.
+- `getRelated(file)`: returns related files for the given file in descending
+  score order. Synchronous.
+- Calling `getFiles()` / `getRelated()` before `analyze()` throws.
 
-### 8.3 全ペア取得パターン
+### 8.3 All-pairs pattern
 
-`allPairs()` は提供しない。呼び出し側で `getFiles()` と `getRelated()` を組み合わせる:
+`allPairs()` is not provided. Callers should combine `getFiles()` and
+`getRelated()`:
 
 ```ts
 const files = analyzer.getFiles()
 const allPairs = files.flatMap(f =>
   analyzer.getRelated(f).map(r => ({ fileA: f, fileB: r.file, score: r.score }))
 )
-// score は対称なので重複あり。必要に応じて呼び出し側で除去する。
+// Scores are symmetric, so this contains duplicates. The caller should
+// deduplicate as needed.
 ```
 
-## 9. キャッシュ
+## 9. Cache
 
-### 9.1 概要
+### 9.1 Overview
 
-- `analyze()` の結果をディスクに永続化し、2 回目以降の `analyze()` を高速化する。
-- **デフォルト有効**。`cache: false` で無効化できる。
-- **複数スロット方式**: 複数の HEAD（=ブランチ切替や複数 worktree）で共存できる。あるブランチで `analyze()` しても、他ブランチのキャッシュは消えない。
+- The result of `analyze()` is persisted to disk so that subsequent calls run
+  faster.
+- **Enabled by default.** Can be disabled with `cache: false`.
+- **Multi-slot layout**: multiple HEADs (i.e. branch switches or multiple
+  worktrees) can coexist. Running `analyze()` on one branch does not delete
+  the cache from another.
 
 ### 9.2 API
 
@@ -163,80 +188,113 @@ interface AnalyzerOptions {
 }
 ```
 
-- `true` / 未指定: 既定ディレクトリ（`<git-dir>/git-cochange/`）を使用
-- `false`: キャッシュ無効
-- `{ dir }`: キャッシュディレクトリを変更
-- `{ maxEntries }`: LRU 上限を変更（デフォルト 16）
+- `true` / unspecified: use the default directory (`<git-dir>/git-cochange/`)
+- `false`: cache disabled
+- `{ dir }`: override the cache directory
+- `{ maxEntries }`: override the LRU cap (default 16)
 
-> 旧仕様の `{ path }`（単一ファイル指定）は廃止。複数スロット化に伴い「ディレクトリ」をユーザーが指定する。
+> The old `{ path }` form (single-file specification) has been removed. With
+> the multi-slot layout, the user specifies a *directory*.
 
-### 9.3 ストレージレイアウト
+### 9.3 Storage layout
 
 ```
 <cache-dir>/
-  index.json                      ← LRU 順序とエントリ一覧（任意）
-  <slot-id>.json                  ← 1 ファイル = 1 エントリ
+  index.json                      ← LRU ordering and entry list (optional)
+  <slot-id>.json                  ← one file per entry
   <slot-id>.json
   ...
 ```
 
-- **slot-id**: `<headSha>-<optionsTag>` 形式（例: `a1b2c3...-nm` / `a1b2c3...-m`）。`optionsTag` は `includeMergeCommits` を 1 文字で表す
-- 各エントリは「`headSha` / `includeMergeCommits` / 累積 `ScoreMap` / 直近 5τ コミットのテールバッファ / `cacheTimestamp` / ライブラリ version」を保持する
-- `index.json` はメタデータのみ（slot-id 一覧と最終アクセス時刻）。本体データを読まずに LRU 判定するための補助。破損してもエントリ群から再構築できる
+- **slot-id**: format `<headSha>-<optionsTag>` (e.g. `a1b2c3...-nm` /
+  `a1b2c3...-m`). `optionsTag` encodes `includeMergeCommits` as a single
+  character.
+- Each entry retains: `headSha`, `includeMergeCommits`, the cumulative
+  `ScoreMap`, the tail buffer of the most recent 5τ commits, the
+  `cacheTimestamp`, and the library `version`.
+- `index.json` holds metadata only (the slot-id list and last-access
+  timestamps). It exists to support LRU decisions without reading the
+  payloads. If it is corrupted, it can be reconstructed from the entries.
 
-### 9.4 解決順序（`analyze()` の挙動）
+### 9.4 Resolution order (behavior of `analyze()`)
 
-現 `(headSha, includeMergeCommits)` に対して、以下の順で再利用を試みる:
+For the current `(headSha, includeMergeCommits)`, the following are tried in
+order:
 
-1. **直接ヒット**: 同じ slot-id のエントリがあればそのまま再利用（計算なし、`index.json` の最終アクセス時刻のみ更新）
-2. **祖先からの forward incremental**: 既存エントリのうち `includeMergeCommits` が一致し、かつ「現 HEAD の祖先」になっているものを `git merge-base --is-ancestor` で抽出。複数あれば最も近い祖先（`rev-list --count <ancestor>..HEAD` 最小）を選び、その差分コミットを増分更新（§9.5）。新エントリとして書き出す（**祖先エントリは削除しない**）
-3. **全再計算**: 上記いずれも適用できなければ、空状態から計算して新エントリとして書き出す
+1. **Direct hit**: if an entry with the same slot-id exists, reuse it as is
+   (no computation; only the last-access timestamp in `index.json` is
+   updated).
+2. **Forward incremental from an ancestor**: among existing entries with
+   matching `includeMergeCommits`, identify those whose head is an ancestor
+   of the current HEAD using `git merge-base --is-ancestor`. If multiple,
+   pick the closest (smallest `rev-list --count <ancestor>..HEAD`) and apply
+   an incremental update for the diff commits (§9.5). Write the result as a
+   new entry (**the ancestor entry is not deleted**).
+3. **Full recompute**: if neither applies, compute from an empty state and
+   write the result as a new entry.
 
-書き出し後、エントリ数が `maxEntries`（既定 16）を超えていれば最終アクセス時刻が古いものから削除する（LRU eviction）。
+After writing, if the number of entries exceeds `maxEntries` (default 16),
+the entries with the oldest last-access timestamps are evicted (LRU
+eviction).
 
-> 子孫 → 祖先方向の差分（backward incremental）は **提供しない**。多くのケースで LRU により祖先側エントリも残るため、forward incremental だけで実用的にカバーできる。
+> Backward incremental (descendant → ancestor) is **not provided**. In most
+> cases, ancestor entries also remain due to LRU, so forward incremental
+> alone covers the practical cases.
 
-### 9.5 増分更新の仕組み
+### 9.5 Incremental update mechanism
 
-スコアは加法的（`raw(A,B) = Σ contributions`）なので、祖先エントリの `ScoreMap` に対し、`<ancestor>..HEAD` の新規コミット群の寄与を加算するだけで現 HEAD の `ScoreMap` が得られる。
+Because the score is additive (`raw(A, B) = Σ contributions`), the current
+HEAD's `ScoreMap` can be obtained by adding the contributions of new commits
+in `<ancestor>..HEAD` to the ancestor entry's `ScoreMap`.
 
-ただし新規コミットと祖先側コミットの間のクロス項（5τ 以内）を計算するため、祖先エントリには **直近 5τ コミットのテールバッファ** を含めておく。新規コミットの最古タイムスタンプがテールバッファの窓より外側にある場合は、増分更新を諦めて全再計算にフォールバックする。
+To compute the cross-terms (within 5τ) between new commits and the
+ancestor-side commits, the ancestor entry includes a **tail buffer of the
+most recent 5τ commits**. If the oldest timestamp among the new commits
+falls outside the cached window, the incremental update is abandoned and a
+full recompute is performed.
 
-### 9.6 無効化と全再計算のトリガ
+### 9.6 Triggers for invalidation / full recompute
 
-以下のいずれかで該当エントリの再利用を諦める（→ 新規エントリ作成）:
+Reuse of a given entry is abandoned (→ a new entry is created) when any of
+the following happens:
 
-- ライブラリ version 不一致（古いエントリは削除）
-- `index.json` または該当エントリの JSON 破損
-- 祖先関係の崩壊（force-push 等）— ただし**他ブランチ由来のエントリには影響しない**
+- Library `version` mismatch (the old entry is deleted)
+- `index.json` or the relevant entry's JSON is corrupted
+- The ancestor relationship has been broken (e.g. by force-push) — but
+  **entries from other branches are unaffected**
 
-### 9.7 削除済みファイルの扱い（実装の補足）
+### 9.7 Deleted files (implementation note)
 
-- 内部の `ScoreMap` は「過去に存在した全ファイル」を含む。削除済みファイル除外（§7.4）はクエリ時（`getFiles()` / `getRelated()`）で `git ls-files` の結果と突き合わせて適用する
-- これによりキャッシュはファイル削除のたびに無効化されない
+- The internal `ScoreMap` includes "every file that has ever existed".
+  Excluding deleted files (§7.4) is applied at query time (`getFiles()` /
+  `getRelated()`) by intersecting with the result of `git ls-files`.
+- This way the cache is not invalidated every time a file is deleted.
 
-## 10. 非機能要件
+## 10. Non-functional requirements
 
-### 10.1 言語/ランタイム
+### 10.1 Language / runtime
 
-- **TypeScript** で実装する。
-- Node.js 上で動作する前提。
-- 公開 API は TypeScript の型定義を提供する。
+- Implemented in **TypeScript**.
+- Runs on Node.js.
+- The public API ships TypeScript type definitions.
 
-### 10.2 パフォーマンス
+### 10.2 Performance
 
-- **対象規模**: Linux カーネル相当（コミット数 ~100万、ファイル数 ~8万）を想定する。
-- **数値目標**: 現時点では設定しない。実測して問題があれば対処する。
-- キャッシュ実装（将来フェーズ）が大規模リポジトリへの主な対応手段となる想定。
+- **Target scale**: roughly the Linux kernel (~1M commits, ~80k files).
+- **Numeric goals**: none for now. Address actual problems as they are
+  measured.
+- The cache (a future phase) is the main mechanism for handling large
+  repositories.
 
-### 10.3 git 取得方法
+### 10.3 git access
 
-- **simple-git** を使用する。
-- git バイナリはホスト環境に存在することを前提とする。
-- 生の git 出力を文字列パースすることは避ける。
+- Use **simple-git**.
+- Assume the git binary is available on the host.
+- Avoid parsing raw git output as strings.
 
-## 11. 配布形態
+## 11. Distribution
 
-- **npm ライブラリとしてのみ** 配布する。
-- TypeScript の型定義を同梱する。
-- CLI は **現スコープ外** 。将来的に別途提供する可能性はあるが、本仕様では扱わない。
+- Distributed **as an npm library only**.
+- Ships TypeScript type definitions.
+- A CLI is **out of scope** for now. It may be provided separately in the
+  future, but is not addressed in this specification.
