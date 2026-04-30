@@ -2,7 +2,8 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { CommitInfo } from './git'
 import { getGitDir } from './git'
-import { CUTOFF_SECONDS, ScoreMap, type ScoreMapJSON } from './scorer'
+import { ScoreMap, type ScoreMapJSON } from './score-map'
+import { CUTOFF_SECONDS } from './scorer'
 
 const ENTRY_VERSION = 1
 const ENTRY_EXT = '.json'
