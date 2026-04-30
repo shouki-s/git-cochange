@@ -63,11 +63,7 @@ export class Analyzer {
 
   getFiles(): string[] {
     const state = this.ensureAnalyzed()
-    const result: string[] = []
-    for (const f of state.scoreMap.files()) {
-      if (state.trackedFiles.has(f)) result.push(f)
-    }
-    return result
+    return Array.from(state.scoreMap.files()).filter((f) => state.trackedFiles.has(f))
   }
 
   getRelated(file: string): RelatedFile[] {
