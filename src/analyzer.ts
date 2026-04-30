@@ -98,29 +98,25 @@ export class Analyzer {
       since: base?.headSha,
     })
 
-    if (!base) {
-      const scoreMap = new ScoreMap()
-      applyCommits(scoreMap, newCommits, [])
-      const { tail, maxTimestamp } = buildTail(newCommits)
-      return { scoreMap, tail, maxTimestamp }
-    }
-
-    if (newCommits.length === 0) {
+    if (base && newCommits.length === 0) {
       return { scoreMap: base.scoreMap, tail: base.tail, maxTimestamp: base.cacheTimestamp }
     }
 
-    // If the ancestor's tail buffer doesn't cover the new commits' lookback
-    // window, fall back to recomputing from scratch.
-    const minNewTs = newCommits.reduce((m, c) => Math.min(m, c.timestamp), Number.POSITIVE_INFINITY)
-    if (minNewTs < base.cacheTimestamp - CUTOFF_SECONDS) return this.computeFromBase(null)
+    if (base) {
+      // If the ancestor's tail buffer doesn't cover the new commits' lookback
+      // window, fall back to recomputing from scratch.
+      const minNewTs = newCommits.reduce((m, c) => Math.min(m, c.timestamp), Number.POSITIVE_INFINITY)
+      if (minNewTs < base.cacheTimestamp - CUTOFF_SECONDS) return this.computeFromBase(null)
+    }
 
-    applyCommits(base.scoreMap, newCommits, base.tail)
-    const merged = base.tail.concat(newCommits)
-    const { tail, maxTimestamp } = buildTail(merged)
+    const scoreMap = base?.scoreMap ?? new ScoreMap()
+    const oldTail = base?.tail ?? []
+    applyCommits(scoreMap, newCommits, oldTail)
+    const { tail, maxTimestamp } = buildTail(oldTail.concat(newCommits))
     return {
-      scoreMap: base.scoreMap,
+      scoreMap,
       tail,
-      maxTimestamp: Math.max(maxTimestamp, base.cacheTimestamp),
+      maxTimestamp: Math.max(maxTimestamp, base?.cacheTimestamp ?? 0),
     }
   }
 
