@@ -18,6 +18,26 @@
     "node": ">=20.4.0"
   },
   "license": "MIT",
+  "author": {
+    "name": "Shouki SAKAMOTO",
+    "email": "32442796+shouki-s@users.noreply.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shouki-s/git-cochange.git"
+  },
+  "homepage": "https://github.com/shouki-s/git-cochange#readme",
+  "bugs": {
+    "url": "https://github.com/shouki-s/git-cochange/issues"
+  },
+  "keywords": [
+    "git",
+    "co-change",
+    "logical-coupling",
+    "commit-log",
+    "code-analysis",
+    "file-relevance"
+  ],
   "dependencies": {
     "simple-git": "^3.0.0"
   },

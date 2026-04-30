@@ -1,33 +1,40 @@
 # CLAUDE.md
 
-設計上の決定・仕様はすべて **SPEC.md** に記録されている。実装に入る前に必ず確認すること。
+All design decisions and specifications are recorded in **SPEC.md**. Always
+review it before starting implementation.
 
-## アーキテクチャ
+## Architecture
 
 ```
 src/
-  git.ts      — simple-git で git log / ls-files / rev-parse を取得
-  scorer.ts   — スコア計算（時間減衰、author制約、正規化）。ScoreMap の (de)serialize と incremental update を提供
-  cache.ts    — キャッシュの読み書き、無効化判定、増分更新の組み立て
-  analyzer.ts — 公開クラス Analyzer（analyze / getFiles / getRelated）
-  index.ts    — 公開 API エクスポートのみ
+  git.ts      — fetches git log / ls-files / rev-parse via simple-git
+  scorer.ts   — score computation (time decay, author constraint,
+                normalization). Provides ScoreMap (de)serialization and
+                incremental update.
+  cache.ts    — cache read/write, invalidation, and incremental-update
+                assembly
+  analyzer.ts — public class Analyzer (analyze / getFiles / getRelated)
+  index.ts    — public API exports only
 ```
 
-## スコアリングモデルの要点
+## Scoring model essentials
 
-- 減衰関数: `exp(-Δt / τ)`、τ = 8時間（固定、ユーザー設定不可）
-- 打ち切り: 5τ = 40時間（これ以上離れたペアは計算スキップ）
-- 同一 author email のコミット間のみスコアを計算する
-- 正規化: `score(A,B) = raw(A,B) / sqrt(raw(A,A) × raw(B,B))`（値域 0〜1、対称）
+- Decay function: `exp(-Δt / τ)`, τ = 8 hours (fixed, not user-configurable)
+- Cutoff: 5τ = 40 hours (pairs farther apart than this are skipped)
+- Scores are computed only between commits with the same author email
+- Normalization: `score(A, B) = raw(A, B) / sqrt(raw(A, A) × raw(B, B))`
+  (range 0–1, symmetric)
 
-## 意図的にしていないこと
+## Intentionally not done
 
-- リネーム/移動の追跡なし（現在のパスの履歴のみ対象）
-- 削除済みファイルは `getFiles()` に含めない（フィルタはクエリ時に適用、内部 `ScoreMap` は保持）
-- `allPairs()` メソッドは提供しない（`getFiles()` + `getRelated()` の組み合わせで対応）
+- No rename/move tracking (only the history of the current path is considered)
+- Deleted files are excluded from `getFiles()` (the filter is applied at query
+  time; the internal `ScoreMap` retains them)
+- No `allPairs()` method (use `getFiles()` + `getRelated()` together)
 
-## キャッシュ
+## Cache
 
-- ディスク永続化あり、デフォルト有効。詳細は SPEC §9 参照。
-- 既定パス: `<git-dir>/git-cochange/cache.json`
-- 加法的スコアリングを利用した増分更新あり（テールバッファに直近 5τ のコミットを保持）
+- Disk persistence is enabled by default. See SPEC §9 for details.
+- Default path: `<git-dir>/git-cochange/cache.json`
+- Incremental updates leverage the additive scoring model (the tail buffer
+  retains commits within the last 5τ).

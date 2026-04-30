@@ -1,6 +1,6 @@
 # git-cochange
 
-git のコミットログを解析し、ファイル間の関連度を算出するライブラリ。
+A library that analyzes git commit logs to compute relevance scores between files.
 
 ## Installation
 
@@ -23,60 +23,66 @@ const related = analyzer.getRelated('src/api.ts')
 
 ## Examples
 
-`examples/visualize/` に、関連度を D3 force-directed グラフとして可視化する HTML を生成するデモを同梱。
+`examples/visualize/` contains a demo that generates an HTML page visualizing
+the relevance scores as a D3 force-directed graph.
 
 ```bash
 npx tsx examples/visualize <owner/name>
-# → graph.html が生成される。ブラウザで開くと min-score / top-K のスライダで動的にフィルタできる。
+# → graph.html is generated. Open it in a browser to filter dynamically with
+#   the min-score / top-K sliders.
 ```
 
 ## API
 
 ### `new Analyzer(repoPath, options?)`
 
-| オプション | 型 | デフォルト | 説明 |
+| Option | Type | Default | Description |
 |---|---|---|---|
-| `ref` | `string` | `'HEAD'` | 解析対象の git ref |
-| `includeMergeCommits` | `boolean` | `false` | マージコミットを含めるか |
-| `cache` | `boolean \| { dir?: string; maxEntries?: number }` | `true` | ディスクキャッシュ。`false` で無効化、`{ dir }` で保存先ディレクトリを変更可、`{ maxEntries }` で LRU 上限を変更可（デフォルト 16）。既定パスは `<git-dir>/git-cochange/` |
+| `ref` | `string` | `'HEAD'` | The git ref to analyze |
+| `includeMergeCommits` | `boolean` | `false` | Whether to include merge commits |
+| `cache` | `boolean \| { dir?: string; maxEntries?: number }` | `true` | Disk cache. `false` disables it; `{ dir }` overrides the directory; `{ maxEntries }` overrides the LRU cap (default 16). The default path is `<git-dir>/git-cochange/`. |
 
-### キャッシュ
+### Cache
 
-2 回目以降の `analyze()` は HEAD ごとに 1 ファイルとして保存されたエントリを参照する。
+On the second and subsequent calls to `analyze()`, entries stored as one file
+per HEAD are reused.
 
-- 同じ HEAD なら直接ヒット（再計算なし）
-- 祖先となる HEAD のエントリがあれば、その差分コミットだけを増分計算（forward incremental）
-- どちらも適用できなければ全再計算
+- Same HEAD: direct hit (no recomputation)
+- An ancestor HEAD's entry exists: only the diff commits are computed
+  incrementally (forward incremental)
+- Otherwise: full recomputation
 
-ブランチを切り替えても他ブランチのエントリは消えない。エントリ数が `maxEntries` を超えると mtime ベースの LRU で古いものから削除される。
+Switching branches does not delete entries from other branches. When the number
+of entries exceeds `maxEntries`, the oldest are evicted by mtime-based LRU.
 
 ### `analyzer.analyze(): Promise<void>`
 
-git ログを取得してスコアを計算する。他のメソッドより先に呼ぶ必要がある。
+Fetches the git log and computes scores. Must be called before any other
+method.
 
 ### `analyzer.getFiles(): string[]`
 
-スコアリングされた全ファイルのパス（リポジトリルートからの相対パス）を返す。
+Returns the paths (relative to the repository root) of all scored files.
 
 ### `analyzer.getRelated(file: string): RelatedFile[]`
 
-指定ファイルの関連ファイルをスコア降順で返す。
+Returns related files for the given file in descending order of score.
 
 ```ts
 interface RelatedFile {
-  file: string   // リポジトリルートからの相対パス
-  score: number  // 0〜1
+  file: string   // path relative to the repository root
+  score: number  // 0–1
 }
 ```
 
 ## Development
 
 ```bash
-npm run build      # TypeScript コンパイル（dist/ に出力）
-npm test           # テスト実行（node:test + tsx）
-npx tsc --noEmit   # 型チェックのみ
-npm run lint       # コードフォーマットと静的解析
-npm run lint:fix   # コードフォーマットと静的解析を修正
+npm run build      # TypeScript compile (output to dist/)
+npm test           # run tests (node:test + tsx)
+npx tsc --noEmit   # type-check only
+npm run lint       # format and static analysis
+npm run lint:fix   # auto-fix format and static analysis
 ```
 
-CI は GitHub Actions で Node 20 / 22 に対してビルドとテストを実行する。
+CI runs the build and tests against Node 20 / 22 on GitHub Actions.
