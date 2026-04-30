@@ -11,7 +11,8 @@ import {
   slotId,
 } from './cache'
 import { type CommitInfo, countCommitsBetween, fetchCommits, getTrackedFiles, isAncestor, resolveSha } from './git'
-import { applyCommits, CUTOFF_SECONDS, ScoreMap } from './scorer'
+import { ScoreMap } from './score-map'
+import { applyCommits, CUTOFF_SECONDS } from './scorer'
 
 export interface AnalyzerOptions {
   ref?: string
@@ -63,11 +64,7 @@ export class Analyzer {
 
   getFiles(): string[] {
     const state = this.ensureAnalyzed()
-    const result: string[] = []
-    for (const f of state.scoreMap.files()) {
-      if (state.trackedFiles.has(f)) result.push(f)
-    }
-    return result
+    return Array.from(state.scoreMap.files()).filter((f) => state.trackedFiles.has(f))
   }
 
   getRelated(file: string): RelatedFile[] {
