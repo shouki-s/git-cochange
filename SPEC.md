@@ -47,7 +47,25 @@ consumer.
 
 ## 5. Output
 
-(Not documented here.)
+The library exposes results through query methods on the `Analyzer` instance.
+There is no file or stream output; the caller decides how to consume the
+data.
+
+- **List of analyzed files** — `getFiles(): string[]`
+  - Repository-root–relative paths
+  - Limited to files currently tracked by `git ls-files` (deleted files are
+    excluded at query time; see §7.4)
+  - Order is unspecified
+- **Related files for a given file** — `getRelated(file): RelatedFile[]`
+  - Each element is `{ file: string, score: number }`
+  - `file`: a repository-root–relative path of a related file
+  - `score`: relevance score in `[0, 1]` (see §6.3)
+  - Sorted by `score` in descending order
+  - Pairs whose normalized score is `0` are omitted
+  - Returns `[]` if the queried file is not tracked
+- **Symmetry** — `score(A, B) = score(B, A)` (see §6.3). When iterating all
+  pairs via `getFiles()` + `getRelated()`, each unordered pair appears twice;
+  the caller should deduplicate as needed (see §8.3).
 
 ## 6. Scoring
 
