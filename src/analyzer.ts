@@ -98,11 +98,7 @@ export class Analyzer {
       since: base?.headSha,
     })
 
-    if (base && newCommits.length === 0) {
-      return { scoreMap: base.scoreMap, tail: base.tail, maxTimestamp: base.cacheTimestamp }
-    }
-
-    if (base) {
+    if (base && newCommits.length > 0) {
       // If the ancestor's tail buffer doesn't cover the new commits' lookback
       // window, fall back to recomputing from scratch.
       const minNewTs = newCommits.reduce((m, c) => Math.min(m, c.timestamp), Number.POSITIVE_INFINITY)
