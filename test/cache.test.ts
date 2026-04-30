@@ -112,7 +112,7 @@ describe('cache (multi-slot)', () => {
     }
   })
 
-  test('direct hit: rerunning analyze with the same HEAD reuses the entry without rewriting it', async () => {
+  test('rerunning analyze with the same HEAD produces byte-identical cache content', async () => {
     const { dir, git } = await makeRepo()
     try {
       await commitFiles(git, dir, { 'A.ts': '1', 'B.ts': '1' }, { date: '2024-01-01T00:00:00Z' })
@@ -131,7 +131,7 @@ describe('cache (multi-slot)', () => {
       const slots2 = await listSlotFiles(cacheDir)
       assert.deepEqual(slots2, slots1)
       const after = await readFile(join(cacheDir, slots2[0]), 'utf8')
-      // Direct hit must not rewrite the body (mtime is bumped via utimes only).
+      // Same HEAD → same scoreMap/tail/cacheTimestamp → identical JSON.
       assert.equal(after, before)
 
       // Result is consistent with a no-cache run.
