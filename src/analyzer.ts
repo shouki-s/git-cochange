@@ -3,7 +3,6 @@ import {
   type CacheConfig,
   type CacheEntry,
   type CacheOption,
-  type EntryMeta,
   evictLRU,
   listEntries,
   loadEntry,
@@ -86,11 +85,7 @@ export class Analyzer {
   }
 
   private async resolveResult(config: CacheConfig, headSha: string, currentId: string): Promise<ComputeResult> {
-    const dir = config.enabled ? config.dir : null
-    if (!dir) return this.computeFromBase(null)
-
-    const ancestor = await this.findNearestAncestor(dir, headSha)
-    const base = ancestor ? await loadEntry(dir, ancestor.id) : null
+    const base = await this.findNearestAncestor(config, headSha)
     const result = await this.computeFromBase(base)
     await this.persist(config, headSha, currentId, result)
     return result
@@ -143,7 +138,10 @@ export class Analyzer {
     await evictLRU(config.dir, config.maxEntries)
   }
 
-  private async findNearestAncestor(dir: string, headSha: string): Promise<EntryMeta | null> {
+  private async findNearestAncestor(config: CacheConfig, headSha: string): Promise<CacheEntry | null> {
+    if (!config.enabled || !config.dir) return null
+    const dir = config.dir
+
     const entries = await listEntries(dir)
     const candidates = entries.filter((e) => e.includeMergeCommits === this.includeMergeCommits)
     if (candidates.length === 0) return null
@@ -161,7 +159,7 @@ export class Analyzer {
       })),
     )
     distances.sort((a, b) => a.distance - b.distance)
-    return distances[0].entry
+    return loadEntry(dir, distances[0].entry.id)
   }
 
   private ensureAnalyzed(): AnalyzedState {
