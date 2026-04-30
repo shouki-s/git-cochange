@@ -62,13 +62,7 @@ function entryPath(dir: string, id: string): string {
 }
 
 export async function loadEntry(dir: string, id: string): Promise<CacheEntry | null> {
-  let raw: string
-  try {
-    raw = await readFile(entryPath(dir, id), 'utf8')
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
-    throw err
-  }
+  const raw = await readFile(entryPath(dir, id), 'utf8')
 
   let parsed: EntryFileFormat
   try {
