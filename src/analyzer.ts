@@ -10,7 +10,6 @@ import {
   resolveCacheConfig,
   saveEntry,
   slotId,
-  touchEntry,
 } from './cache'
 import { type CommitInfo, countCommitsBetween, fetchCommits, getTrackedFiles, isAncestor, resolveSha } from './git'
 import { applyCommits, CUTOFF_SECONDS, ScoreMap } from './scorer'
@@ -90,22 +89,11 @@ export class Analyzer {
     const dir = config.enabled ? config.dir : null
     if (!dir) return this.computeFromBase(null)
 
-    const direct = await loadEntry(dir, currentId)
-    if (direct) {
-      await touchEntry(dir, currentId)
-      return { scoreMap: direct.scoreMap, tail: direct.tail, maxTimestamp: direct.cacheTimestamp }
-    }
-
-    const ancestor = await this.loadNearestAncestor(dir, headSha)
-    const result = await this.computeFromBase(ancestor)
+    const ancestor = await this.findNearestAncestor(dir, headSha)
+    const base = ancestor ? await loadEntry(dir, ancestor.id) : null
+    const result = await this.computeFromBase(base)
     await this.persist(config, headSha, currentId, result)
     return result
-  }
-
-  private async loadNearestAncestor(dir: string, headSha: string): Promise<CacheEntry | null> {
-    const meta = await this.findNearestAncestor(dir, headSha)
-    if (!meta) return null
-    return loadEntry(dir, meta.id)
   }
 
   private async computeFromBase(base: CacheEntry | null): Promise<ComputeResult> {
@@ -157,9 +145,7 @@ export class Analyzer {
 
   private async findNearestAncestor(dir: string, headSha: string): Promise<EntryMeta | null> {
     const entries = await listEntries(dir)
-    const candidates = entries.filter(
-      (e) => e.includeMergeCommits === this.includeMergeCommits && e.headSha !== headSha,
-    )
+    const candidates = entries.filter((e) => e.includeMergeCommits === this.includeMergeCommits)
     if (candidates.length === 0) return null
 
     const ancestryChecks = await Promise.all(
