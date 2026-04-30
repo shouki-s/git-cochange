@@ -11,7 +11,8 @@ import {
   slotId,
 } from './cache'
 import { type CommitInfo, countCommitsBetween, fetchCommits, getTrackedFiles, isAncestor, resolveSha } from './git'
-import { applyCommits, CUTOFF_SECONDS, ScoreMap } from './scorer'
+import { ScoreMap } from './score-map'
+import { applyCommits, CUTOFF_SECONDS } from './scorer'
 
 export interface AnalyzerOptions {
   ref?: string

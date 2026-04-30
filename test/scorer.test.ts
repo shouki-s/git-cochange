@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import type { CommitInfo } from '../src/git'
-import { applyCommits, ScoreMap } from '../src/scorer'
+import { ScoreMap } from '../src/score-map'
+import { applyCommits } from '../src/scorer'
 
 const TAU = 8 * 3600
 
