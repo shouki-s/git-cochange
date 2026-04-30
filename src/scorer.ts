@@ -66,12 +66,6 @@ export class ScoreMap {
   }
 }
 
-export function computeScores(commits: CommitInfo[]): ScoreMap {
-  const scoreMap = new ScoreMap()
-  applyCommits(scoreMap, commits, [])
-  return scoreMap
-}
-
 /**
  * Incrementally fold `newCommits` into `scoreMap`, given that `oldTail` (commits
  * already accounted for in `scoreMap`, within 5τ of the most recent old commit)

@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { CommitInfo } from './git'
 import { getGitDir } from './git'
@@ -104,16 +104,7 @@ export async function saveEntry(dir: string, id: string, entry: CacheEntry): Pro
   await writeFile(entryPath(dir, id), JSON.stringify(file))
 }
 
-export async function touchEntry(dir: string, id: string): Promise<void> {
-  const now = new Date()
-  try {
-    await utimes(entryPath(dir, id), now, now)
-  } catch {
-    // Ignore: missing file or permission issue. Eviction will still function on remaining entries.
-  }
-}
-
-export interface EntryMeta {
+interface EntryMeta {
   id: string
   headSha: string
   includeMergeCommits: boolean
