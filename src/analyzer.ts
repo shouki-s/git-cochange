@@ -112,7 +112,7 @@ export class Analyzer {
     return {
       scoreMap,
       tail,
-      maxTimestamp: Math.max(maxTimestamp, base?.cacheTimestamp ?? 0),
+      maxTimestamp,
     }
   }
 
